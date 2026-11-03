@@ -1,0 +1,40 @@
+{
+  "name": "anbar-finance",
+  "productName": "AnbarFinance",
+  "version": "1.0.0",
+  "description": "Anbar Governorate Finance System",
+  "main": "main.js",
+  "author": "Anbar Governorate",
+  "license": "UNLICENSED",
+  "build": {
+    "appId": "iq.anbar.finance",
+    "productName": "AnbarFinance",
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "AnbarFinance-${version}.exe"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "app/**"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "compression": "maximum"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  }
+}
