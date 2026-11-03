@@ -1,7 +1,7 @@
 {
   "name": "anbar-finance",
   "productName": "AnbarFinance",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Anbar Governorate Finance System",
   "main": "main.js",
   "author": "Anbar Governorate",

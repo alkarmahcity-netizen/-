@@ -51,7 +51,7 @@ const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2
 function query(name, ord, lim) {
   const q = {
     orderBy: (f, dir) => query(name, { f, dir: dir || "asc" }, lim),
-    limit: (n) => query(name, ord, n),
+    limit: () => query(name, ord, null),
     where: () => q,
     get: async () => snap(),
     onSnapshot(next, err) {

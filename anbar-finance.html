@@ -45,6 +45,9 @@ nav.tabs a[aria-current="page"]{color:var(--head-ink);border-bottom-color:var(--
 nav.tabs a .cnt{font-size:11px;background:var(--bad);color:#fff;border-radius:99px;padding:0 6px;margin-inline-start:4px}
 nav.tabs a .cnt.g{background:var(--gold)}
 nav.tabs a .cnt:empty{display:none}
+.grps{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
+.grp{background:transparent;border:1px solid rgba(255,255,255,.25);color:var(--head-muted);border-radius:99px;padding:4px 12px;font-size:13px;cursor:pointer;white-space:nowrap;font-family:inherit}
+.grp[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#fff;font-weight:700}
 
 main{padding-block:18px 60px}
 .view{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
@@ -218,17 +221,8 @@ details.card[open] summary{margin-bottom:12px}
     <span class="sync" id="sync">جارٍ الاتصال بقاعدة البيانات…</span>
     <span id="lockbox"></span>
   </div>
-  <div class="wrap"><nav class="tabs" id="tabs">
-    <a href="#dash">لوحة القيادة</a>
-    <a href="#projects">المشاريع</a>
-    <a href="#advances">السلف<span class="cnt g" id="advcnt"></span></a>
-    <a href="#allocs">التخصيصات<span class="cnt" id="alloccnt"></span></a>
-    <a href="#guar">خطابات الضمان<span class="cnt" id="gcnt"></span></a>
-    <a href="#reports">التقارير</a>
-    <a href="#alerts">الإنذار المبكر<span class="cnt" id="alcnt"></span></a>
-    <a href="#companies">الشركات</a>
-    <a href="#journal">سجل الحركات</a>
-  </nav></div>
+  <div class="wrap grps" id="groups"></div>
+  <div class="wrap"><nav class="tabs" id="tabs"></nav></div>
 </header>
 
 <main class="wrap">
@@ -241,6 +235,14 @@ details.card[open] summary{margin-bottom:12px}
   <section class="view" id="v-alerts" hidden></section>
   <section class="view" id="v-companies" hidden></section>
   <section class="view" id="v-journal" hidden></section>
+  <section class="view" id="v-op" hidden></section>
+  <section class="view" id="v-opx" hidden></section>
+  <section class="view" id="v-emps" hidden></section>
+  <section class="view" id="v-jv" hidden></section>
+  <section class="view" id="v-ledger" hidden></section>
+  <section class="view" id="v-tb" hidden></section>
+  <section class="view" id="v-coa" hidden></section>
+
   <p class="foot">المصدر: ملف الموقف المالي العام 31-10-2026 وملف إعادة الاستقرار والمنافذ الحدودية، مضافاً إليها ما يُسجَّل في النظام. الأرقام بالدينار العراقي (د.ع).</p>
 </main>
 <div id="drawerHost"></div>
@@ -283,7 +285,7 @@ const paidOf=a=>payList(a).reduce((s,p)=>s+(+p.amt||0),0);
 const remOf=a=>a.stage==="rejected"?0:Math.max(0,(+a.gross||0)-paidOf(a));
 const DEF_PW="2d61556b8c707f388e30435bace408035d59019f18622bd3bf0c862fedd41ecd";
 const LOCK_MS=15*60*1000;
-const WRITE_KINDS=["newProject","newAdv","newG","newAlloc","bulkPay","chpw","editAdv"];
+const WRITE_KINDS=["newProject","newAdv","newG","newAlloc","bulkPay","chpw","editAdv","opLine","opVoucher","emp","jvNew","coa","import"];
 async function sha(s){try{const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(s));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}catch(_){return ""}}
 const ALK={base:"تخصيص أصلي",add:"تعزيز",cut:"تخفيض",tout:"مناقلة إلى خطة أخرى",tin:"مناقلة من خطة أخرى"};
 const GKINDS=["ضمان حسن التنفيذ","ضمان السلفة التشغيلية","ضمان العطاء (دخول المناقصة)","ضمان الصيانة","أخرى"];
@@ -866,6 +868,389 @@ document.addEventListener("pointerdown",()=>{if(isUnlocked())S.unlockUntil=Date.
 document.addEventListener("keydown",()=>{if(isUnlocked())S.unlockUntil=Date.now()+LOCK_MS},true);
 setInterval(()=>{if(S.wasUnl&&!isUnlocked())doLock(true)},15000);
 
+/* ===== الموازنة التشغيلية والموظفون والاستيراد والمحاسبة ===== */
+const CHAPTERS=["تعويضات الموظفين","المستلزمات الخدمية","المستلزمات السلعية","صيانة الموجودات","الموجودات غير المالية","المنح والإعانات والرعاية الاجتماعية","النفقات الأخرى"];
+const EMP_ST=["مستمر","مجاز","منقول","متقاعد","مستقيل","متوفى"];
+let OPL=[],OPX=[],EMPC=[],EMP=[],JVS=[],IMPB=[],COA={map:{},custom:[]},ENTC=null,IMPWB=null;
+const opKey=(yr,code)=>String(yr)+"_"+String(code).replace(/[^A-Za-z0-9_\-.~:@+؀-ۿ]/g,"_").replace(/[؀-ۿ]/g,c=>"u"+c.charCodeAt(0).toString(16));
+const opLine=(yr,code)=>OPL.find(l=>String(l.yr)===String(yr)&&String(l.code)===String(code));
+const opSpent=(yr,code)=>OPX.filter(v=>v.st!=="cancelled"&&String(v.yr)===String(yr)&&String(v.code)===String(code)).reduce((s,v)=>s+(+v.gross||0),0);
+function opAgg(yr){const sp={};for(const v of OPX)if(v.st!=="cancelled"&&String(v.yr)===String(yr))sp[v.code]=(sp[v.code]||0)+(+v.gross||0);
+  return OPL.filter(l=>String(l.yr)===String(yr)).map(l=>({...l,spent:sp[l.code]||0,avail:(+l.alloc||0)-(sp[l.code]||0)})).sort((a,b)=>String(a.code).localeCompare(String(b.code),"en",{numeric:true}))}
+const empNet=e=>(+e.base||0)+(+e.allow||0)-(+e.ded||0);
+const yearsOf=arr=>[...new Set([CUR_YEAR,S.oyr||CUR_YEAR,...arr])].filter(Boolean).sort().reverse();
+function impBatches(kind){const L=IMPB.filter(b=>b.kind===kind).sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,5);if(!L.length)return "";
+  return `<div class="card"><h2>آخر عمليات الاستيراد</h2><div class="tbl-wrap" style="max-height:none"><table><thead><tr><th>الوقت</th><th>الملف</th><th>النتيجة</th><th>المنفذ</th><th></th></tr></thead><tbody>
+  ${L.map(b=>`<tr><td class="num">${esc(String(b.at).replace("T"," ").slice(0,16))}</td><td>${esc(b.file||"")}</td><td>${esc(Object.entries(b.counts||{}).map(([k,v])=>({new:"إضافة",upd:"تحديث"}[k]||k)+" "+v).join(" · "))}${b.st==="undone"?' <span class="pill s-idle">تم التراجع</span>':""}</td><td>${esc(whoName(b.by))}</td>
+  <td>${b.st!=="undone"&&canWrite()&&(b.undo||kind==="opexp")?`<button class="btn danger sm" data-undo="${b._id}">تراجع عن هذا الاستيراد</button>`:""}</td></tr>`).join("")}</tbody></table></div></div>`}
+
+/* الأبواب والتخصيصات */
+function vOp(){if(!S.oyr)S.oyr=CUR_YEAR;const yrs=yearsOf(OPL.map(l=>String(l.yr)));
+  const R=opAgg(S.oyr);const T=R.reduce((t,r)=>({a:t.a+(+r.alloc||0),s:t.s+r.spent}),{a:0,s:0});
+  const by={};for(const r of R){const c=r.ch||"غير مصنف";(by[c]=by[c]||{a:0,s:0,rows:[]});by[c].a+=+r.alloc||0;by[c].s+=r.spent;by[c].rows.push(r)}
+  const chs=Object.entries(by).sort((a,b)=>{const i=CHAPTERS.indexOf(a[0]),j=CHAPTERS.indexOf(b[0]);return (i<0?99:i)-(j<0?99:j)});
+  $("#v-op").innerHTML=`<div class="vhead"><h2>الموازنة التشغيلية: الأبواب والتخصيصات</h2><div class="acts">${canEditBase()?`<button class="btn gold" data-open="opLine">＋ بند جديد</button><button class="btn" data-imp="oplines">استيراد من Excel</button>`:""}<button class="btn ghost" data-tpl="oplines">تنزيل قالب Excel</button>${DL?'<button class="btn ghost" data-xl="opl">تصدير Excel</button>':""}</div></div>
+  <div class="srcbar"><span>السنة المالية:</span>${yrs.map(y=>`<button class="chip" data-oyr="${y}" aria-pressed="${y===S.oyr}">${y}</button>`).join("")}</div>
+  <div class="kpis"><div class="kpi"><span class="l">التخصيص</span><span class="v">${big(T.a)}</span><span class="s">${R.length} بنداً</span></div>
+   <div class="kpi"><span class="l">المصروف</span><span class="v">${big(T.s)}</span><span class="s">من مستندات الصرف النافذة</span></div>
+   <div class="kpi"><span class="l">المتاح</span><span class="v" style="${T.a-T.s<0?"color:var(--bad)":""}">${big(T.a-T.s)}</span><span class="s">نسبة الصرف ${pct(T.a?T.s/T.a:null)}</span></div></div>
+  ${R.length?chs.map(([c,v])=>`<div class="card"><h2>${esc(c)} <small>التخصيص ${fmt(v.a)} · المصروف ${fmt(v.s)} · المتاح ${fmt(v.a-v.s)}</small></h2>
+   <div class="tbl-wrap cards" style="max-height:none"><table><thead><tr><th>الرمز</th><th>البند</th><th>الفصل</th><th class="n">التخصيص</th><th class="n">المصروف</th><th class="n">المتاح</th><th class="n">الصرف</th></tr></thead><tbody>
+   ${v.rows.map(r=>{const u=r.alloc>0?r.spent/r.alloc:(r.spent?Infinity:0);return `<tr data-opline="${esc(r._id)}" style="cursor:pointer"><td data-l="الرمز"><span class="num">${esc(r.code)}</span></td><td class="wide pname">${esc(r.name)}</td><td data-l="الفصل">${esc(r.sec||"—")}</td>
+   <td class="n" data-l="التخصيص"><span class="num">${fmt(r.alloc)}</span></td><td class="n" data-l="المصروف"><span class="num">${fmt(r.spent)}</span></td><td class="n" data-l="المتاح"><span class="num" style="${r.avail<0?"color:var(--bad);font-weight:700":""}">${fmt(r.avail)}</span></td>
+   <td class="n" data-l="الصرف"><div class="mini"><span class="num">${isFinite(u)?pct(u):"—"}</span><div class="track"><i style="width:${Math.min(100,(isFinite(u)?u:1)*100)}%;${u>1?"background:var(--bad)":u>.9?"background:var(--warn)":""}"></i></div></div></td></tr>`}).join("")}
+   </tbody></table></div></div>`).join("")
+  :`<div class="empty">${DB===false?"قاعدة البيانات غير متاحة في هذا العرض.":`لا توجد بنود لسنة ${esc(S.oyr)}. نزّل القالب واملأه بالأبواب والبنود وتخصيصاتها، ثم اضغط «استيراد من Excel». أو أضف البنود يدوياً بزر «بند جديد».`}</div>`}
+  ${impBatches("oplines")}`}
+function drOpLine(){const l=S.dr.id?OPL.find(x=>x._id===S.dr.id):null;const yr=l?l.yr:(S.oyr||CUR_YEAR);const sp=l?opSpent(l.yr,l.code):0;
+  const V=l?OPX.filter(v=>String(v.yr)===String(l.yr)&&String(v.code)===String(l.code)).sort((a,b)=>b.no-a.no):[];
+  $("#drawerHost").innerHTML=shell(l?"البند "+l.code+" — "+l.name:"بند جديد في الموازنة التشغيلية",l?`السنة المالية ${esc(l.yr)} · المصروف ${fmt(sp)} · المتاح ${fmt((+l.alloc||0)-sp)}`:"",`
+   ${canWrite()?`<form class="fm" id="olf">
+    <label>رمز البند${l?" (ثابت)":""}<input class="inp num" id="ol_code" type="text" value="${esc(l?l.code:"")}" ${l?"readonly":""}></label>
+    <label>السنة المالية<input class="inp num" id="ol_yr" type="number" value="${esc(yr)}" ${l?"readonly":""}></label>
+    <label class="full">اسم البند<input class="inp" id="ol_name" type="text" value="${esc(l?l.name:"")}"></label>
+    <label>الباب<input class="inp" id="ol_ch" list="dl-ch" value="${esc(l?l.ch||"":"")}"></label>
+    <label>الفصل<input class="inp" id="ol_sec" type="text" value="${esc(l?l.sec||"":"")}"></label>
+    ${moneyField("ol_alloc","التخصيص السنوي (د.ع)",l?l.alloc:"")}
+    ${l?`<label class="full">سبب التعديل (مطلوب)<input class="inp" id="ol_why" type="text"></label>`:""}
+    <div class="full acts"><button class="btn" type="submit" id="ol_save">${l?"حفظ التعديل":"إضافة البند"}</button>${l&&canWrite()?`<button class="btn gold" type="button" data-open="opVoucher" data-yr="${esc(l.yr)}" data-pl="${esc(l.code)}">＋ مستند صرف على هذا البند</button>`:""}<span class="fmsg" id="ol_msg"></span></div></form>
+    <datalist id="dl-ch">${CHAPTERS.map(c=>`<option value="${c}">`).join("")}</datalist>`:wnote()}
+   ${l?`<div class="card"><h2>مستندات الصرف على البند <small>${V.length} مستنداً</small></h2>${V.length?`<div class="tbl-wrap" style="max-height:none"><table><thead><tr><th>رقم</th><th>التاريخ</th><th>المستفيد</th><th class="n">الإجمالي</th><th>الحالة</th></tr></thead><tbody>${V.map(v=>`<tr><td class="num">${v.no}</td><td class="num">${esc(v.date)}</td><td>${esc(v.payee)}</td><td class="n num">${fmt(v.gross)}</td><td>${v.st==="cancelled"?'<span class="pill s-bad">ملغى</span>':'<span class="pill s-done">نافذ</span>'}</td></tr>`).join("")}</tbody></table></div>`:'<p class="note">لا توجد مستندات صرف.</p>'}</div>`:""}`)}
+async function saveOpLine(ev){ev.preventDefault();const msg=$("#ol_msg");msg.className="fmsg err";const l=S.dr.id?OPL.find(x=>x._id===S.dr.id):null;
+  const code=val("ol_code"),yr=String(parseInt(val("ol_yr"))||""),name=val("ol_name"),alloc=money("ol_alloc");
+  if(!code){msg.textContent="أدخل رمز البند.";return}if(!/^\d{4}$/.test(yr)){msg.textContent="أدخل السنة المالية.";return}if(!name){msg.textContent="أدخل اسم البند.";return}
+  if(isNaN(alloc)||alloc<0){msg.textContent="التخصيص غير صالح.";return}
+  if(!l&&opLine(yr,code)){msg.textContent="يوجد بند بالرمز نفسه في هذه السنة.";return}
+  const sp=opSpent(yr,code);if(alloc<sp-1){msg.textContent=`لا يمكن: صُرف على البند ${fmt(sp)} د.ع.`;return}
+  const nv={code,yr,name,ch:val("ol_ch"),sec:val("ol_sec"),alloc};let d="";
+  if(l){const ch=Object.keys(nv).filter(k=>String(nv[k])!==String(l[k]??""));if(!ch.length){msg.textContent="لم تغيّر أي حقل.";return}if(!val("ol_why")){msg.textContent="اكتب سبب التعديل.";return}
+    d=ch.map(k=>`${({name:"الاسم",ch:"الباب",sec:"الفصل",alloc:"التخصيص"})[k]||k}: ${k==="alloc"?fmt(l[k]):l[k]||"—"} ← ${k==="alloc"?fmt(nv[k]):nv[k]||"—"}`).join(" | ")+" · السبب: "+val("ol_why")}
+  $("#ol_save").disabled=true;
+  try{await DB.collection("oplines").doc(l?l._id:opKey(yr,code)).set({...(l?Object.fromEntries(Object.entries(l).filter(([k])=>k!=="_id")):{}),...nv,at:l?l.at:new Date().toISOString(),upAt:new Date().toISOString(),by:await me()});
+    logA(l?"تعديل بند موازنة تشغيلية":"إضافة بند موازنة تشغيلية",{label:`${code} — ${name} / ${yr}`,amt:alloc,d});toast(l?"عُدّل البند":"أضيف البند");S.oyr=yr;closeDrawer()}
+  catch(err){$("#ol_save").disabled=false;failMsg(msg,err)}}
+
+/* مستندات الصرف */
+function vOpx(){if(!S.oyr)S.oyr=CUR_YEAR;const yrs=yearsOf([...OPL.map(l=>String(l.yr)),...OPX.map(v=>String(v.yr))]);
+  const q=norm(S.xq||"");const L=OPX.filter(v=>String(v.yr)===S.oyr&&(!S.xcode||String(v.code)===S.xcode)&&(!q||norm([v.payee,v.desc,v.ref,v.no,v.code].join(" ")).includes(q))).sort((a,b)=>b.no-a.no);
+  const act=L.filter(v=>v.st!=="cancelled");const lines=OPL.filter(l=>String(l.yr)===S.oyr).sort((a,b)=>String(a.code).localeCompare(String(b.code),"en",{numeric:true}));
+  $("#v-opx").innerHTML=`<div class="vhead"><h2>مستندات الصرف</h2><div class="acts">${canEditBase()?`<button class="btn gold" data-open="opVoucher">＋ مستند صرف</button><button class="btn" data-imp="opexp">استيراد من Excel</button>`:""}<button class="btn ghost" data-tpl="opexp">تنزيل قالب Excel</button>${DL?'<button class="btn ghost" data-xl="opx">تصدير Excel</button>':""}</div></div>
+  <p class="note">كل مستند يأخذ رقماً متسلسلاً للسنة، ويُخصم من تخصيص البند. المستند لا يُحذف: الإلغاء يولّد قيداً عكسياً ويبقى ظاهراً في السجل.</p>
+  <div class="srcbar"><span>السنة المالية:</span>${yrs.map(y=>`<button class="chip" data-oyr="${y}" aria-pressed="${y===S.oyr}">${y}</button>`).join("")}</div>
+  <div class="filters"><input class="inp" type="search" id="xq" placeholder="ابحث بالمستفيد أو البيان أو رقم المستند أو الصك…" value="${esc(S.xq||"")}">
+   <select class="inp" id="xcode"><option value="">كل البنود</option>${lines.map(l=>`<option value="${esc(l.code)}" ${String(l.code)===S.xcode?"selected":""}>${esc(l.code+" — "+l.name)}</option>`).join("")}</select></div>
+  <div class="summary"><span>المستندات النافذة: <b class="num">${fmt(act.length)}</b></span><span>الإجمالي: <b class="num">${fmt(act.reduce((s,v)=>s+(+v.gross||0),0))}</b></span><span>الصافي المدفوع: <b class="num">${fmt(act.reduce((s,v)=>s+(+v.net||0),0))}</b></span></div>
+  ${L.length?`<div class="tbl-wrap cards"><table><thead><tr><th>رقم</th><th>التاريخ</th><th>البند</th><th>المستفيد والبيان</th><th class="n">الإجمالي</th><th class="n">الاستقطاعات</th><th class="n">الصافي</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>
+  ${L.slice(0,S.xshown||200).map(v=>{const ln=opLine(v.yr,v.code);return `<tr><td data-l="رقم المستند"><b class="num">${v.no}</b></td><td data-l="التاريخ"><span class="num">${esc(v.date)}</span></td><td data-l="البند"><span class="num">${esc(v.code)}</span><div class="pco">${esc(ln?ln.name:"")}</div></td>
+   <td class="wide"><div class="pname">${esc(v.payee)}</div><div class="pco">${esc([v.desc,v.ref?"صك "+v.ref:""].filter(Boolean).join(" · "))}</div></td>
+   <td class="n" data-l="الإجمالي"><span class="num">${fmt(v.gross)}</span></td><td class="n" data-l="الاستقطاعات"><span class="num">${fmt((+v.ret||0)+(+v.tax||0)+(+v.oth||0))}</span></td><td class="n" data-l="الصافي"><span class="num">${fmt(v.net)}</span></td>
+   <td data-l="الحالة">${v.st==="cancelled"?`<span class="pill s-bad">ملغى</span><div class="pco">${esc(v.cancelWhy||"")}</div>`:'<span class="pill s-done">نافذ</span>'}${v.overAlloc?' <span class="pill s-warn">تجاوز التخصيص</span>':""}</td>
+   <td class="wide" data-l="الإجراء">${v.st==="cancelled"||!canWrite()?"—":S.xact===v._id?`<div class="iact"><input class="inp" id="xc_why" placeholder="سبب الإلغاء (مطلوب)"><div class="acts"><button class="btn danger sm" data-doxact="${v._id}">تأكيد الإلغاء</button><button class="btn ghost sm" data-cancelxact="1">رجوع</button></div></div>`:`<button class="btn danger sm" data-xact="${v._id}">إلغاء المستند</button>`}</td></tr>`}).join("")}
+  </tbody></table></div>${L.length>(S.xshown||200)?`<div class="more"><button class="btn ghost" data-xmore="1">عرض المزيد</button></div>`:""}`
+  :`<div class="empty">${!lines.length?`أدخل بنود الموازنة التشغيلية لسنة ${esc(S.oyr)} أولاً من تبويب «الأبواب والتخصيصات».`:"لا توجد مستندات صرف تطابق البحث."}</div>`}
+  ${impBatches("opexp")}`}
+function drOpVoucher(){const yr=S.dr.yr||S.oyr||CUR_YEAR;const lines=OPL.filter(l=>String(l.yr)===String(yr));const pre=S.dr.pl?opLine(yr,S.dr.pl):null;
+  $("#drawerHost").innerHTML=shell("مستند صرف جديد","يُخصم من تخصيص البند ويولّد قيداً محاسبياً تلقائياً",canWrite()?(lines.length?`<form class="fm" id="ovf">
+   <label class="full">البند<input class="inp" id="ov_line" list="dl-opl" value="${pre?esc(pre.code+" — "+pre.name):""}" placeholder="ابدأ بكتابة الرمز أو الاسم"></label>
+   <label>تاريخ الصرف<input class="inp" id="ov_date" type="date" value="${String(yr)===CUR_YEAR?today():yr+"-12-31"}"></label>
+   <label>رقم الصك أو الحوالة<input class="inp" id="ov_ref" type="text"></label>
+   <label class="full">الجهة المستفيدة<input class="inp" id="ov_payee" type="text"></label>
+   <label class="full">البيان<input class="inp" id="ov_desc" type="text"></label>
+   ${moneyField("ov_gross","المبلغ الإجمالي (د.ع)","")}${moneyField("ov_ret","التأمينات المستقطعة","")}${moneyField("ov_tax","ضريبة الدخل","")}${moneyField("ov_oth","استقطاعات أخرى","")}
+   <div class="full netbox" id="ov_info"></div>
+   <div class="full acts"><button class="btn gold" type="submit" id="ov_save">حفظ المستند</button><span class="fmsg" id="ov_msg"></span></div></form>
+   <datalist id="dl-opl">${lines.map(l=>`<option value="${esc(l.code+" — "+l.name)}">`).join("")}</datalist>`:`<div class="empty">لا توجد بنود لسنة ${esc(yr)}. أضف البنود أولاً.</div>`):wnote())}
+function ovInfo(){const box=$("#ov_info");if(!box)return;const yr=yearOf(val("ov_date"))||S.oyr;const code=val("ov_line").split(" — ")[0].trim();const l=opLine(yr,code);
+  const g=money("ov_gross")||0,d=["ov_ret","ov_tax","ov_oth"].reduce((s,i)=>s+(money(i)||0),0);
+  box.innerHTML=l?`<span>تخصيص البند <b class="num">${fmt(l.alloc)}</b></span><span>المصروف <b class="num">${fmt(opSpent(yr,code))}</b></span><span>المتاح <b class="num">${fmt((+l.alloc||0)-opSpent(yr,code))}</b></span><span>الصافي للمستفيد <b class="num">${fmt(g-d)}</b></span>`:`<span class="pco">${code?"البند غير موجود في سنة "+esc(yr):"اختر البند لعرض المتاح منه"}</span>`}
+async function saveVoucher(ev){ev.preventDefault();const msg=$("#ov_msg");msg.className="fmsg err";
+  const date=val("ov_date"),yr=yearOf(date),code=val("ov_line").split(" — ")[0].trim(),l=opLine(yr,code);
+  const g=money("ov_gross"),r=money("ov_ret"),t=money("ov_tax"),o=money("ov_oth");
+  if(!yr){msg.textContent="أدخل تاريخ الصرف.";return}if(!l){msg.textContent=`البند «${code}» غير موجود في سنة ${yr}.`;return}
+  if(!val("ov_payee")){msg.textContent="اكتب الجهة المستفيدة.";return}
+  if(!(g>0)){msg.textContent="أدخل المبلغ الإجمالي.";return}if([r,t,o].some(x=>isNaN(x)||x<0)||r+t+o>g){msg.textContent="تحقق من الاستقطاعات.";return}
+  const avail=(+l.alloc||0)-opSpent(yr,code);let over=false;
+  if(g>avail+1){if(SET.enforce){msg.textContent=`مرفوض: المبلغ يتجاوز المتاح من تخصيص البند (${fmt(avail)} د.ع). أضف تعزيزاً للبند أولاً.`;return}
+    if(!S.dr.overOk){msg.textContent="المبلغ يتجاوز التخصيص والرقابة معطلة. اضغط حفظ مرة أخرى لتسجيله استثناءً.";S.dr.overOk=true;return}over=true}
+  const no=Math.max(0,...OPX.filter(v=>String(v.yr)===yr).map(v=>+v.no||0))+1;
+  const doc={yr,no,date,code,payee:val("ov_payee"),desc:val("ov_desc"),gross:g,ret:r,tax:t,oth:o,net:g-r-t-o,ref:val("ov_ref"),st:"active",at:new Date().toISOString(),by:await me()};if(over)doc.overAlloc=true;
+  $("#ov_save").disabled=true;
+  try{await DB.collection("opexp").add(doc);logA("مستند صرف",{label:`م.ص ${no}/${yr} — ${code} ${l.name}`,amt:g,d:`${doc.payee}${doc.desc?" · "+doc.desc:""}${doc.ref?" · صك "+doc.ref:""}${over?" · تجاوز التخصيص":""}`});toast(`حُفظ مستند الصرف رقم ${no}/${yr}`);S.oyr=yr;closeDrawer()}
+  catch(err){$("#ov_save").disabled=false;failMsg(msg,err)}}
+async function cancelVoucher(id,btn){const v=OPX.find(x=>x._id===id);const why=(btn.closest(".iact").querySelector("#xc_why").value||"").trim();if(!why){toast("اكتب سبب الإلغاء");return}
+  btn.disabled=true;try{const at=new Date().toISOString();await DB.collection("opexp").doc(id).update({st:"cancelled",cancelAt:at,cancelWhy:why,cancelBy:await me()});logA("إلغاء مستند صرف",{label:`م.ص ${v.no}/${v.yr}`,amt:v.gross,d:why});S.xact=null;toast("أُلغي المستند وسُجّل قيد عكسي")}catch(err){btn.disabled=false;toast("تعذّر الحفظ")}}
+
+/* الموظفون */
+const EMP_F=[{k:"num",l:"الرقم الوظيفي",req:1,syn:["الرقم الوظيفي","رقم الموظف","الرقم الاحصائي","الرقم","رقم"]},{k:"name",l:"الاسم",req:1,syn:["الاسم الرباعي","اسم الموظف","الاسم الثلاثي","الاسم","الاسم الكامل"]},
+  {k:"title",l:"العنوان الوظيفي",syn:["العنوان الوظيفي","العنوان","الوظيفة","المسمى الوظيفي"]},{k:"grade",l:"الدرجة",syn:["الدرجة الوظيفية","الدرجة"]},{k:"step",l:"المرحلة",syn:["المرحلة"]},
+  {k:"cert",l:"الشهادة",syn:["الشهادة","التحصيل الدراسي","التحصيل"]},{k:"dept",l:"القسم",syn:["القسم","الشعبة","مكان العمل","الوحدة"]},
+  {k:"base",l:"الراتب الاسمي",t:"num",syn:["الراتب الاسمي","الراتب الاساسي","الراتب"]},{k:"allow",l:"مجموع المخصصات",t:"num",syn:["مجموع المخصصات","اجمالي المخصصات","المخصصات"]},
+  {k:"ded",l:"مجموع الاستقطاعات",t:"num",syn:["مجموع الاستقطاعات","اجمالي الاستقطاعات","الاستقطاعات"]},{k:"bank",l:"المصرف",syn:["المصرف","البنك","مصرف التوطين"]},
+  {k:"acct",l:"رقم الحساب",syn:["رقم الحساب","الحساب المصرفي","رقم الايبان","iban","الايبان"]},{k:"hire",l:"تاريخ التعيين",t:"date",syn:["تاريخ التعيين","تاريخ المباشرة"]},
+  {k:"st",l:"الحالة",syn:["الحالة","حالة الموظف"]}];
+function vEmps(){const q=norm(S.eq||"");const depts=[...new Set(EMP.map(e=>e.dept).filter(Boolean))].sort();const sts=[...new Set(EMP.map(e=>e.st||"مستمر"))];
+  const L=EMP.filter(e=>(!S.edept||e.dept===S.edept)&&(!S.est||(e.st||"مستمر")===S.est)&&(!q||norm(e.name+" "+e.num+" "+(e.title||"")).includes(q))).sort((a,b)=>String(a.num).localeCompare(String(b.num),"en",{numeric:true}));
+  const act=L.filter(e=>!e.st||e.st==="مستمر"||e.st==="مجاز");const sm=k=>act.reduce((s,e)=>s+(+e[k]||0),0);
+  $("#v-emps").innerHTML=`<div class="vhead"><h2>سجل الموظفين</h2><div class="acts">${canEditBase()?`<button class="btn gold" data-open="emp">＋ موظف</button><button class="btn" data-imp="emps">استيراد من Excel</button>`:""}<button class="btn ghost" data-tpl="emps">تنزيل قالب Excel</button>${DL?'<button class="btn ghost" data-xl="emps">تصدير Excel</button>':""}</div></div>
+  <p class="note">الاستيراد يقارن الملف بالسجل الحالي حسب الرقم الوظيفي: يضيف الجديد، ويعرض كل تغيير في الراتب أو المخصصات قبل حفظه، ويمكن التراجع عن أي استيراد. كشف الرواتب الشهري هو الخطوة التالية.</p>
+  <div class="kpis"><div class="kpi"><span class="l">الموظفون المستمرون</span><span class="v num">${fmt(act.length)}</span><span class="s">من ${fmt(L.length)} في القائمة</span></div>
+   <div class="kpi"><span class="l">الرواتب الاسمية</span><span class="v">${big(sm("base"))}</span><span class="s">شهرياً</span></div><div class="kpi"><span class="l">المخصصات</span><span class="v">${big(sm("allow"))}</span><span class="s">شهرياً</span></div>
+   <div class="kpi"><span class="l">الاستقطاعات</span><span class="v">${big(sm("ded"))}</span><span class="s">شهرياً</span></div><div class="kpi"><span class="l">صافي الرواتب</span><span class="v">${big(act.reduce((s,e)=>s+empNet(e),0))}</span><span class="s">شهرياً · ${big(act.reduce((s,e)=>s+(+e.base||0)+(+e.allow||0),0)*12)} سنوياً قبل الاستقطاع</span></div></div>
+  <div class="filters"><input class="inp" type="search" id="eq" placeholder="ابحث بالاسم أو الرقم الوظيفي…" value="${esc(S.eq||"")}">
+   <select class="inp" id="edept"><option value="">كل الأقسام</option>${depts.map(d=>`<option ${d===S.edept?"selected":""}>${esc(d)}</option>`).join("")}</select>
+   <select class="inp" id="est"><option value="">كل الحالات</option>${sts.map(d=>`<option ${d===S.est?"selected":""}>${esc(d)}</option>`).join("")}</select></div>
+  ${L.length?`<div class="tbl-wrap cards"><table><thead><tr><th>الرقم</th><th>الاسم والعنوان</th><th>القسم</th><th>الدرجة/المرحلة</th><th class="n">الاسمي</th><th class="n">المخصصات</th><th class="n">الاستقطاعات</th><th class="n">الصافي</th><th>الحالة</th></tr></thead><tbody>
+   ${L.slice(0,S.eshown||150).map(e=>`<tr data-emp="${esc(e.num)}" style="cursor:pointer"><td data-l="الرقم الوظيفي"><span class="num">${esc(e.num)}</span></td><td class="wide"><div class="pname">${esc(e.name)}</div><div class="pco">${esc(e.title||"")}</div></td><td data-l="القسم">${esc(e.dept||"—")}</td><td data-l="الدرجة/المرحلة">${esc([e.grade,e.step].filter(Boolean).join(" / ")||"—")}</td>
+   <td class="n" data-l="الاسمي"><span class="num">${fmt(e.base)}</span></td><td class="n" data-l="المخصصات"><span class="num">${fmt(e.allow)}</span></td><td class="n" data-l="الاستقطاعات"><span class="num">${fmt(e.ded)}</span></td><td class="n" data-l="الصافي"><b class="num">${fmt(empNet(e))}</b></td><td data-l="الحالة"><span class="pill ${!e.st||e.st==="مستمر"?"s-done":"s-idle"}">${esc(e.st||"مستمر")}</span></td></tr>`).join("")}
+  </tbody></table></div>${L.length>(S.eshown||150)?`<div class="more"><button class="btn ghost" data-emore="1">عرض المزيد (${fmt(L.length-(S.eshown||150))})</button></div>`:""}`
+  :`<div class="empty">${EMP.length?"لا نتائج.":"السجل فارغ. نزّل القالب أو استخدم ملف الرواتب الحالي مباشرة، ثم اضغط «استيراد من Excel»."}</div>`}
+  ${impBatches("emps")}`}
+function drEmp(){const e=S.dr.num?EMP.find(x=>String(x.num)===String(S.dr.num)):null;
+  $("#drawerHost").innerHTML=shell(e?e.name:"موظف جديد",e?"الرقم الوظيفي "+esc(e.num):"",canWrite()?`<form class="fm" id="emf">
+   ${EMP_F.map(f=>f.t==="num"?moneyField("em_"+f.k,f.l,e?e[f.k]:""):f.k==="st"?`<label>${f.l}<input class="inp" id="em_st" list="dl-est" value="${esc(e?e.st||"مستمر":"مستمر")}"></label>`:`<label class="${f.k==="name"?"full":""}">${f.l}${f.req?" (مطلوب)":""}<input class="inp ${f.k==="num"?"num":""}" id="em_${f.k}" ${f.t==="date"?'type="date"':'type="text"'} value="${esc(e?e[f.k]??"":"")}" ${e&&f.k==="num"?"readonly":""}></label>`).join("")}
+   ${e?`<label class="full">سبب التعديل (مطلوب)<input class="inp" id="em_why" type="text"></label>`:""}
+   <div class="full netbox"><span>صافي الراتب</span><b class="num" id="em_net">${fmt(e?empNet(e):0)}</b></div>
+   <div class="full acts"><button class="btn" type="submit" id="em_save">${e?"حفظ التعديل":"إضافة الموظف"}</button><span class="fmsg" id="em_msg"></span></div></form>
+   <datalist id="dl-est">${EMP_ST.map(s=>`<option value="${s}">`).join("")}</datalist>`:`${e?`<div class="figs">${EMP_F.map(f=>`<div class="fig"><div class="l">${f.l}</div><div class="v ${f.t==="num"?"num":""}">${esc(f.t==="num"?fmt(e[f.k]):e[f.k]||"—")}</div></div>`).join("")}</div>`:""}${wnote()}`)}
+function empChunks(list){const L=list.slice().sort((a,b)=>String(a.num).localeCompare(String(b.num),"en",{numeric:true}));const ch=[];for(let i=0;i<L.length;i+=400)ch.push(L.slice(i,i+400));return ch}
+async function empWrite(list){const ch=empChunks(list);const at=new Date().toISOString();
+  for(let i=0;i<ch.length;i++)await DB.collection("emps").doc("c"+String(i).padStart(3,"0")).set({i,rows:ch[i],at});
+  for(const d of EMPC)if(+d.i>=ch.length)await DB.collection("emps").doc(d._id).delete()}
+async function saveEmp(ev){ev.preventDefault();const msg=$("#em_msg");msg.className="fmsg err";const e=S.dr.num?EMP.find(x=>String(x.num)===String(S.dr.num)):null;
+  const nv={};for(const f of EMP_F){if(f.t==="num"){const v=money("em_"+f.k);if(isNaN(v)){msg.textContent=`قيمة غير صالحة في «${f.l}».`;return}nv[f.k]=v}else nv[f.k]=val("em_"+f.k)}
+  if(!nv.num||!nv.name){msg.textContent="الرقم الوظيفي والاسم مطلوبان.";return}
+  if(!e&&EMP.some(x=>String(x.num)===String(nv.num))){msg.textContent="الرقم الوظيفي مسجل لموظف آخر.";return}
+  let d="";if(e){const ch=EMP_F.filter(f=>String(nv[f.k]??"")!==String(e[f.k]??(f.t==="num"?0:"")));if(!ch.length){msg.textContent="لم تغيّر أي حقل.";return}if(!val("em_why")){msg.textContent="اكتب سبب التعديل.";return}
+    d=ch.map(f=>`${f.l}: ${f.t==="num"?fmt(e[f.k]):e[f.k]||"—"} ← ${f.t==="num"?fmt(nv[f.k]):nv[f.k]||"—"}`).join(" | ")+" · السبب: "+val("em_why")}
+  $("#em_save").disabled=true;const at=new Date().toISOString();
+  try{const list=e?EMP.map(x=>String(x.num)===String(e.num)?{...x,...nv,upAt:at}:x):[...EMP,{...nv,addAt:at}];await empWrite(list);
+    logA(e?"تعديل بيانات موظف":"إضافة موظف",{label:`${nv.num} — ${nv.name}`,amt:empNet(nv),d});toast(e?"عُدّلت بيانات الموظف":"أضيف الموظف");closeDrawer()}
+  catch(err){$("#em_save").disabled=false;failMsg(msg,err)}}
+
+/* الاستيراد من Excel */
+const IMPORTS={
+ emps:{title:"استيراد سجل الموظفين",fields:EMP_F,
+  check(rows){const cur=new Map(EMP.map(e=>[String(e.num),e]));const seen=new Set();
+   return rows.map(v=>{const m=[];let st="new",diff=[];const k=String(v.num??"").trim();
+    if(!k)return {v,st:"err",m:["الرقم الوظيفي فارغ"]};if(!v.name&&!cur.has(k))return {v,st:"err",m:["الاسم فارغ"]};
+    if(seen.has(k))return {v,st:"err",m:["الرقم الوظيفي مكرر في الملف"]};seen.add(k);
+    for(const f of EMP_F)if(f.t==="num"&&v[f.k]!==undefined&&isNaN(v[f.k]))return {v,st:"err",m:[`«${f.l}» ليس رقماً`]};
+    if(v.base!==undefined&&v.base<=0)m.push("الراتب الاسمي صفر أو سالب");
+    if(empNet({...(cur.get(k)||{}),...v})<0)m.push("صافي الراتب سالب");
+    if(cur.has(k)){const o=cur.get(k);diff=EMP_F.filter(f=>v[f.k]!==undefined&&v[f.k]!==""&&String(v[f.k])!==String(o[f.k]??"")).map(f=>`${f.l}: ${f.t==="num"?fmt(o[f.k]):o[f.k]||"—"} ← ${f.t==="num"?fmt(v[f.k]):v[f.k]}`);st=diff.length?"upd":"same"}
+    if(v.base!==undefined&&cur.has(k)&&+cur.get(k).base>0&&Math.abs(v.base-cur.get(k).base)/cur.get(k).base>0.25)m.push("تغيّر الراتب الاسمي أكثر من 25%");
+    return {v,st:m.length&&st!=="same"?(st==="new"?"neww":"updw"):st,m,diff}})},
+  async commit(res,file){const at=new Date().toISOString();const cur=new Map(EMP.map(e=>[String(e.num),e]));const prev=[],added=[];
+   for(const r of res){const k=String(r.v.num).trim();const v=Object.fromEntries(Object.entries(r.v).filter(([,x])=>x!==undefined&&x!==""&&!(typeof x==="number"&&isNaN(x))));v.num=k;
+    if(cur.has(k)){prev.push(cur.get(k));cur.set(k,{...cur.get(k),...v,upAt:at})}else{added.push(k);cur.set(k,{st:"مستمر",...v,addAt:at})}}
+   await empWrite([...cur.values()]);const undo=JSON.stringify({prev,added}).length<200000?{prev,added}:null;
+   return {counts:{new:added.length,upd:prev.length},undo}},
+  async undo(b){const cur=new Map(EMP.map(e=>[String(e.num),e]));for(const k of b.undo.added)cur.delete(String(k));for(const p of b.undo.prev)cur.set(String(p.num),p);await empWrite([...cur.values()])}},
+ oplines:{title:"استيراد بنود الموازنة التشغيلية",fields:[{k:"code",l:"رمز البند",req:1,syn:["رمز البند","الرمز","رقم البند","رمز الحساب","الرقم"]},{k:"name",l:"اسم البند",req:1,syn:["اسم البند","البند","التفاصيل","اسم الحساب","النوع","المادة"]},
+   {k:"ch",l:"الباب",syn:["الباب","اسم الباب"]},{k:"sec",l:"الفصل",syn:["الفصل","اسم الفصل"]},{k:"alloc",l:"التخصيص",t:"num",req:1,syn:["التخصيص","التخصيص السنوي","المبلغ المخصص","الاعتماد","المبلغ"]},{k:"yr",l:"السنة المالية",t:"num",syn:["السنة","السنة المالية"]}],
+  check(rows){const seen=new Set();const yr0=S.oyr||CUR_YEAR;return rows.map(v=>{const m=[];const yr=String(v.yr&&!isNaN(v.yr)?Math.round(v.yr):yr0);v.yr=yr;const code=String(v.code??"").trim();v.code=code;
+    if(!code)return {v,st:"err",m:["رمز البند فارغ"]};if(!v.name)return {v,st:"err",m:["اسم البند فارغ"]};if(v.alloc===undefined||isNaN(v.alloc)||v.alloc<0)return {v,st:"err",m:["التخصيص ليس رقماً"]};
+    const k=yr+"|"+code;if(seen.has(k))return {v,st:"err",m:["الرمز مكرر في الملف لنفس السنة"]};seen.add(k);
+    const o=opLine(yr,code);if(!o)return {v,st:"new",m};const sp=opSpent(yr,code);if(v.alloc<sp-1)return {v,st:"err",m:[`التخصيص أقل من المصروف على البند (${fmt(sp)})`]};
+    const diff=["name","ch","sec","alloc"].filter(f=>v[f]!==undefined&&v[f]!==""&&String(v[f])!==String(o[f]??"")).map(f=>`${({name:"الاسم",ch:"الباب",sec:"الفصل",alloc:"التخصيص"})[f]}: ${f==="alloc"?fmt(o[f]):o[f]||"—"} ← ${f==="alloc"?fmt(v[f]):v[f]}`);
+    return {v,st:diff.length?"upd":"same",m,diff}})},
+  async commit(res,file,msg){const prev=[];let n=0,u=0;const by=await me();
+   for(const r of res){const v=r.v;const o=opLine(v.yr,v.code);const id=o?o._id:opKey(v.yr,v.code);prev.push({id,data:o?Object.fromEntries(Object.entries(o).filter(([k])=>k!=="_id")):null});
+    const data={...(o?Object.fromEntries(Object.entries(o).filter(([k])=>k!=="_id")):{}),...Object.fromEntries(Object.entries(v).filter(([,x])=>x!==undefined&&x!=="")),at:o?o.at:new Date().toISOString(),upAt:new Date().toISOString(),by};
+    await DB.collection("oplines").doc(id).set(data);o?u++:n++;msg(`جارٍ الحفظ… ${n+u} من ${res.length}`)}
+   return {counts:{new:n,upd:u},undo:JSON.stringify(prev).length<200000?{prev}:null}},
+  async undo(b){for(const p of b.undo.prev){if(p.data)await DB.collection("oplines").doc(p.id).set(p.data);else{const l=OPL.find(x=>x._id===p.id);if(l&&opSpent(l.yr,l.code)>0)throw new Error("البند "+l.code+" عليه مستندات صرف");await DB.collection("oplines").doc(p.id).delete()}}}},
+ opexp:{title:"استيراد مستندات الصرف",fields:[{k:"date",l:"تاريخ الصرف",t:"date",req:1,syn:["تاريخ الصرف","التاريخ","تاريخ المستند"]},{k:"code",l:"رمز البند",req:1,syn:["رمز البند","الرمز","رقم البند","رمز الحساب"]},
+   {k:"payee",l:"الجهة المستفيدة",req:1,syn:["الجهة المستفيدة","المستفيد","اسم المستفيد","الجهة"]},{k:"desc",l:"البيان",syn:["البيان","التفاصيل","الغرض"]},{k:"gross",l:"المبلغ الإجمالي",t:"num",req:1,syn:["المبلغ الإجمالي","المبلغ","الاجمالي"]},
+   {k:"ret",l:"التأمينات",t:"num",syn:["التأمينات","التامينات"]},{k:"tax",l:"ضريبة الدخل",t:"num",syn:["ضريبة الدخل","الضريبة"]},{k:"oth",l:"استقطاعات أخرى",t:"num",syn:["استقطاعات أخرى","استقطاعات اخرى","الاستقطاعات"]},{k:"ref",l:"رقم الصك",syn:["رقم الصك","الصك","رقم الحوالة"]}],
+  check(rows){const used={};return rows.map(v=>{const m=[];const yr=yearOf(v.date);if(!yr)return {v,st:"err",m:["التاريخ غير صالح"]};const code=String(v.code??"").trim();v.code=code;
+    const l=opLine(yr,code);if(!l)return {v,st:"err",m:[`البند ${code} غير موجود في سنة ${yr}`]};if(!v.payee)return {v,st:"err",m:["الجهة المستفيدة فارغة"]};
+    if(!(v.gross>0))return {v,st:"err",m:["المبلغ ليس رقماً موجباً"]};const d=(+v.ret||0)+(+v.tax||0)+(+v.oth||0);if(d>v.gross)return {v,st:"err",m:["الاستقطاعات أكبر من المبلغ"]};
+    const k=yr+"|"+code;used[k]=(used[k]||0)+v.gross;const avail=(+l.alloc||0)-opSpent(yr,code);
+    if(used[k]>avail+1){if(SET.enforce)return {v,st:"err",m:[`يتجاوز المتاح من تخصيص البند (${fmt(avail)})`]};m.push("يتجاوز التخصيص")}
+    if(OPX.some(x=>x.st!=="cancelled"&&x.date===v.date&&String(x.code)===code&&+x.gross===+v.gross&&norm(x.payee)===norm(v.payee)))m.push("يشبه مستنداً مسجلاً (التاريخ والبند والمبلغ والمستفيد)");
+    return {v,st:m.length?"neww":"new",m}})},
+  async commit(res,file,msg,bid){const by=await me();const nx={};let n=0;
+   for(const r of res){const v=r.v;const yr=yearOf(v.date);if(nx[yr]==null)nx[yr]=Math.max(0,...OPX.filter(x=>String(x.yr)===yr).map(x=>+x.no||0));nx[yr]++;
+    const g=+v.gross,rt=+v.ret||0,tx=+v.tax||0,ot=+v.oth||0;const doc={yr,no:nx[yr],date:v.date,code:v.code,payee:v.payee,desc:v.desc||"",gross:g,ret:rt,tax:tx,oth:ot,net:g-rt-tx-ot,ref:v.ref?String(v.ref):"",st:"active",at:new Date().toISOString(),by,batch:bid};
+    if(r.m.includes("يتجاوز التخصيص"))doc.overAlloc=true;await DB.collection("opexp").add(doc);n++;msg(`جارٍ الحفظ… ${n} من ${res.length}`)}
+   return {counts:{new:n},undo:{batch:bid}}},
+  async undo(b){const at=new Date().toISOString(),by=await me();for(const v of OPX.filter(x=>x.batch===b.undo.batch&&x.st!=="cancelled"))await DB.collection("opexp").doc(v._id).update({st:"cancelled",cancelAt:at,cancelWhy:"تراجع عن استيراد",cancelBy:by})}}};
+function cellVal(x,t){if(x==null||x==="")return undefined;
+  if(t==="num"){if(typeof x==="number")return x;const n=toNum(x);return isFinite(n)?n:NaN}
+  if(t==="date"){if(x instanceof Date&&!isNaN(x))return new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10);
+    if(typeof x==="number"&&x>20000&&x<80000)return new Date(Math.round((x-25569)*864e5)).toISOString().slice(0,10);
+    const s=String(x).trim().replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d));let m=s.match(/^(\d{4})[-\/.](\d{1,2})[-\/.](\d{1,2})/);if(m)return `${m[1]}-${m[2].padStart(2,"0")}-${m[3].padStart(2,"0")}`;
+    m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);if(m)return `${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;return s}
+  if(x instanceof Date)return x.toISOString().slice(0,10);
+  return typeof x==="number"&&Number.isInteger(x)?String(x):String(x).replace(/\s+/g," ").trim()}
+function impAutoMap(k,hdr){const C=IMPORTS[k];const map={};let saved={};try{saved=JSON.parse(localStorage.getItem("impmap:"+k)||"{}")}catch(_){}
+  const H=hdr.map(h=>norm(h));const used=new Set();
+  for(const f of C.fields){let j=-1;if(saved[f.k]){j=H.indexOf(norm(saved[f.k]))}
+    if(j<0)for(const s of f.syn){const i=H.findIndex((h,ix)=>!used.has(ix)&&h===norm(s));if(i>=0){j=i;break}}
+    if(j<0)for(const s of f.syn){const i=H.findIndex((h,ix)=>!used.has(ix)&&h&&h.includes(norm(s)));if(i>=0){j=i;break}}
+    map[f.k]=j;if(j>=0)used.add(j)}return map}
+function impLoadSheet(name){const k=S.dr.imp;const ws=IMPWB.Sheets[name];const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:""});
+  const C=IMPORTS[k];const syn=C.fields.flatMap(f=>f.syn.map(norm));let hr=0,best=-1;
+  for(let i=0;i<Math.min(15,aoa.length);i++){const sc=aoa[i].filter(c=>{const n=norm(c);return n&&syn.some(s=>n===s||n.includes(s))}).length;if(sc>best){best=sc;hr=i}}
+  const hdr=(aoa[hr]||[]).map(c=>String(c??"").trim());const rows=aoa.slice(hr+1).filter(r=>r.some(c=>c!==""&&c!=null));
+  S.imp={...S.imp,sheet:name,hr,hdr,rows,map:impAutoMap(k,hdr)};impCheck()}
+function impCheck(){const k=S.dr.imp,C=IMPORTS[k],I=S.imp;const vals=I.rows.map(r=>{const v={};for(const f of C.fields){const j=I.map[f.k];v[f.k]=j>=0?cellVal(r[j],f.t):undefined}return v});
+  const miss=C.fields.filter(f=>f.req&&!(I.map[f.k]>=0));I.miss=miss.map(f=>f.l);I.res=miss.length?[]:C.check(vals)}
+async function impFile(file){const k=S.dr.imp;try{const X=await loadXLSX();const buf=await file.arrayBuffer();IMPWB=X.read(buf,{type:"array",cellDates:true});
+  S.imp={file:file.name,sheets:IMPWB.SheetNames};impLoadSheet(IMPWB.SheetNames[0]);S.dirty=false;renderDrawer()}catch(err){toast("تعذّرت قراءة الملف. تأكد أنه ملف Excel صالح.")}}
+const IST={new:["جديد","s-done"],neww:["جديد مع تنبيه","s-warn"],upd:["تحديث","s-info"],updw:["تحديث مع تنبيه","s-warn"],same:["بلا تغيير","s-idle"],err:["خطأ","s-bad"]};
+function drImport(){const k=S.dr.imp,C=IMPORTS[k],I=S.imp||{};const R=I.res||[];const c=s=>R.filter(r=>r.st===s).length;const ok=R.filter(r=>r.st!=="err"&&r.st!=="same");
+  const kf=C.fields.filter(f=>f.req).map(f=>f.k).concat(C.fields.find(f=>f.t==="num")?.k||[]).slice(0,4);
+  $("#drawerHost").innerHTML=shell(C.title,"اقرأ الملف، راجع المطابقة والمعاينة، ثم احفظ",canWrite()?`
+   <div class="card"><label class="note" for="imp_file">اختر ملف Excel (xlsx أو xls أو csv)</label><input class="inp" type="file" id="imp_file" accept=".xlsx,.xls,.xlsm,.csv" style="margin-top:6px">
+    ${I.file?`<p class="note" style="margin-top:8px">الملف: <b>${esc(I.file)}</b> · الورقة: <select class="inp" id="imp_sheet" style="width:auto;display:inline-block">${I.sheets.map(s=>`<option ${s===I.sheet?"selected":""}>${esc(s)}</option>`).join("")}</select> · صف العناوين: ${I.hr+1} · عدد الصفوف: ${fmt(I.rows.length)}</p>`:`<p class="note" style="margin-top:8px">يتعرّف النظام على الأعمدة بأسمائها تلقائياً. يمكنك استخدام ملفاتكم الحالية أو القالب.</p>`}</div>
+   ${I.rows?`<details class="card" ${I.miss&&I.miss.length?"open":""}><summary>مطابقة الأعمدة ${I.miss&&I.miss.length?`<span class="pill s-bad">ناقص: ${esc(I.miss.join("، "))}</span>`:'<span class="pill s-done">مكتملة</span>'}</summary>
+    <div class="fm">${C.fields.map(f=>`<label>${f.l}${f.req?" (مطلوب)":""}<select class="inp" data-map="${f.k}"><option value="-1">— غير موجود —</option>${I.hdr.map((h,j)=>`<option value="${j}" ${I.map[f.k]===j?"selected":""}>${esc(h||"عمود "+(j+1))}</option>`).join("")}</select></label>`).join("")}</div></details>
+    ${R.length?`<div class="card"><h2>المعاينة</h2><div class="steps">${Object.keys(IST).filter(s=>c(s)).map(s=>`<span class="pill ${IST[s][1]}">${IST[s][0]}: ${fmt(c(s))}</span>`).join(" ")}</div>
+     <div class="tbl-wrap" style="margin-top:10px;max-height:50vh"><table><thead><tr><th>الصف</th><th>الحالة</th>${kf.map(f=>`<th>${esc(C.fields.find(x=>x.k===f).l)}</th>`).join("")}<th>الملاحظات والتغييرات</th></tr></thead><tbody>
+     ${R.map((r,i)=>[r,i]).filter(([r])=>r.st!=="same").slice(0,150).map(([r,i])=>`<tr><td class="num">${I.hr+2+i}</td><td><span class="pill ${IST[r.st][1]}">${IST[r.st][0]}</span></td>${kf.map(f=>`<td>${esc(typeof r.v[f]==="number"?fmt(r.v[f]):r.v[f]??"")}</td>`).join("")}<td class="chg">${esc([...(r.m||[]),...(r.diff||[])].join(" | "))}</td></tr>`).join("")}
+     </tbody></table></div>${R.filter(r=>r.st!=="same").length>150?'<p class="note">تُعرض أول 150 صفاً.</p>':""}
+     <div class="acts" style="margin-top:12px"><button class="btn gold" id="imp_go" data-impgo="1" ${ok.length?"":"disabled"}>حفظ ${fmt(ok.length)} صفاً${c("err")?` وتجاهل ${fmt(c("err"))} صفاً فيه أخطاء`:""}</button><span class="fmsg" id="imp_msg"></span></div></div>`:""}`:""}`:wnote())}
+async function impGo(btn){const k=S.dr.imp,C=IMPORTS[k],I=S.imp;const ok=I.res.filter(r=>r.st!=="err"&&r.st!=="same");if(!ok.length)return;const msg=$("#imp_msg");
+  if(!S.dr.confirm){S.dr.confirm=true;msg.className="fmsg";msg.textContent=`سيُحفظ ${ok.length} صفاً. اضغط مرة أخرى للتأكيد.`;return}
+  btn.disabled=true;const bid=uid();
+  try{const r=await C.commit(ok,I.file,t=>{msg.textContent=t},bid);
+    try{const sv={};for(const f of C.fields)if(I.map[f.k]>=0)sv[f.k]=I.hdr[I.map[f.k]];localStorage.setItem("impmap:"+k,JSON.stringify(sv))}catch(_){}
+    await DB.collection("imports").add({kind:k,file:I.file,at:new Date().toISOString(),by:await me(),counts:r.counts,undo:r.undo,st:"active",bid});
+    logA("استيراد من Excel: "+C.title.replace("استيراد ",""),{label:I.file,d:Object.entries(r.counts).map(([a,b])=>({new:"إضافة",upd:"تحديث"}[a]||a)+" "+b).join(" · ")});
+    toast("اكتمل الاستيراد");S.imp=null;IMPWB=null;closeDrawer()}
+  catch(err){btn.disabled=false;msg.className="fmsg err";msg.textContent="توقف الاستيراد: "+(err&&err.message||"خطأ في الاتصال")+". ما حُفظ قبل التوقف يمكن التراجع عنه."}}
+async function impUndo(id,btn){const b=IMPB.find(x=>x._id===id);if(!b||b.st==="undone")return;
+  if(btn.dataset.sure!=="1"){btn.dataset.sure="1";btn.textContent="اضغط مرة أخرى لتأكيد التراجع";return}
+  btn.disabled=true;try{await IMPORTS[b.kind].undo(b);await DB.collection("imports").doc(id).update({st:"undone",undoAt:new Date().toISOString(),undoBy:await me()});logA("تراجع عن استيراد",{label:b.file,d:IMPORTS[b.kind].title});toast("تم التراجع عن الاستيراد")}
+  catch(err){btn.disabled=false;toast("تعذّر التراجع: "+(err&&err.message||""))}}
+async function impTemplate(k){if(!DL){toast("التنزيل غير متاح في هذا العرض");return}let X;try{X=await loadXLSX()}catch(_){toast("تعذّر تحميل مكتبة Excel");return}
+  const C=IMPORTS[k];const wb=newWB(X);const ws=X.utils.aoa_to_sheet([C.fields.map(f=>f.l)]);ws["!cols"]=C.fields.map(f=>({wch:Math.max(14,f.l.length+4)}));X.utils.book_append_sheet(wb,ws,"البيانات");
+  try{await DL.save({filename:`قالب ${C.title.replace("استيراد ","")}.xlsx`,data:new Uint8Array(X.write(wb,{bookType:"xlsx",type:"array"}))})}catch(err){if(err&&err.code!=="declined")toast("تعذّر حفظ الملف")}}
+
+/* المحاسبة */
+const ATYPE={asset:"موجودات",liab:"أمانات ومطلوبات",fund:"تمويل",rev:"إيرادات",exp:"نفقات"};
+const SYSACC={BANK:{code:"9901",name:"النقد لدى المصرف (الحساب الجاري)",t:"asset"},FUND:{code:"9902",name:"التمويل المستلم من وزارة المالية",t:"fund"},RET:{code:"9903",name:"أمانات: التأمينات المحتجزة",t:"liab"},
+  TAX:{code:"9904",name:"أمانات: ضريبة الدخل المستقطعة",t:"liab"},OTHD:{code:"9905",name:"أمانات: استقطاعات أخرى",t:"liab"},FINE:{code:"9906",name:"إيرادات: الغرامات التأخيرية",t:"rev"},SEIZ:{code:"9907",name:"إيرادات: الضمانات المصادرة",t:"rev"}};
+function accList(){const m=COA.map||{};const out=[];for(const [k,a] of Object.entries(SYSACC))out.push({k,...a,src:"أساسي",...(m[k]||{})});
+  [...new Set(E.map(e=>e.pl))].sort().forEach((p,i)=>out.push({k:"P:"+p,code:"98"+String(i+1).padStart(2,"0"),name:"نفقات المشاريع الاستثمارية: "+p,t:"exp",src:"خطة استثمارية",...(m["P:"+p]||{})}));
+  [...new Map(OPL.map(l=>[String(l.code),l])).values()].sort((a,b)=>String(a.code).localeCompare(String(b.code),"en",{numeric:true})).forEach(l=>out.push({k:"O:"+l.code,code:String(l.code),name:l.name,t:"exp",src:"بند تشغيلي",...(m["O:"+l.code]||{})}));
+  for(const c of (COA.custom||[]))out.push({k:"C:"+c.code,code:c.code,name:c.name,t:c.t||"asset",src:"مضاف"});return out}
+const accMap=()=>Object.fromEntries(accList().map(a=>[a.k,a]));
+function buildEntries(){const out=[];const add=(date,at,src,ref,desc,lines)=>{lines=lines.map(l=>({k:l.k,dr:Math.round(l.dr||0),cr:Math.round(l.cr||0)})).filter(l=>l.dr||l.cr);if(lines.length)out.push({date:String(date||String(at||"").slice(0,10)),at:at||"",src,ref:ref||"",desc,lines})};
+  for(const e of E){for(const a of e.advs){if(a.stage==="rejected")continue;const g=+a.gross||0;
+      for(const p of payList(a)){const f=g?(+p.amt||0)/g:0;const r=(+a.ret||0)*f,t=(+a.tax||0)*f,fi=(+a.fine||0)*f,o=(+a.oth||0)*f;const amt=+p.amt||0;
+        add(p.date,p.at,"صرف سلفة مقاول",p.ref,`${p.pct!=null?p.pct+"% من ":""}السلفة ${advLabel(a)} — ${e.nm}${p.loanId?" (حُوّلت إلى المصرف المقرض)":""}`,[{k:"P:"+e.pl,dr:amt},{k:"BANK",cr:amt-Math.round(r)-Math.round(t)-Math.round(fi)-Math.round(o)},{k:"RET",cr:r},{k:"TAX",cr:t},{k:"FINE",cr:fi},{k:"OTHD",cr:o}])}}
+    for(const t of e.tx)if(t.type==="pay")add(t.date,t.at,"صرف مباشر",t.ref,"صرف مباشر — "+e.nm,[{k:"P:"+e.pl,dr:+t.amt||0},{k:"BANK",cr:+t.amt||0}]);
+    for(const g of e.gs)if(g.st==="seized"){const h=(g.hist||[]).find(x=>x.act==="seize")||{};add(String(h.at||"").slice(0,10),h.at,"مصادرة ضمان",h.ref,`مصادرة ${g.kind} رقم ${g.no} — ${e.nm}`,[{k:"BANK",dr:+g.amt||0},{k:"SEIZ",cr:+g.amt||0}])}}
+  for(const v of OPX){const L=[{k:"O:"+v.code,dr:+v.gross||0},{k:"BANK",cr:+v.net||0},{k:"RET",cr:+v.ret||0},{k:"TAX",cr:+v.tax||0},{k:"OTHD",cr:+v.oth||0}];
+    add(v.date,v.at,"مستند صرف",`م.ص ${v.no}/${v.yr}${v.ref?" · صك "+v.ref:""}`,`${v.payee}${v.desc?" — "+v.desc:""}`,L);
+    if(v.st==="cancelled")add(String(v.cancelAt||"").slice(0,10),v.cancelAt,"إلغاء مستند صرف",`م.ص ${v.no}/${v.yr}`,"قيد عكسي: "+(v.cancelWhy||""),L.map(l=>({k:l.k,dr:l.cr||0,cr:l.dr||0})))}
+  for(const j of JVS){const L=(j.lines||[]).map(l=>({k:l.k,dr:+l.dr||0,cr:+l.cr||0}));add(j.date,j.at,"قيد يدوي",j.ref,j.desc,L);
+    if(j.st==="cancelled")add(String(j.cancelAt||"").slice(0,10),j.cancelAt,"إلغاء قيد يدوي",j.ref,"قيد عكسي: "+(j.cancelWhy||""),L.map(l=>({k:l.k,dr:l.cr,cr:l.dr})))}
+  out.sort((a,b)=>a.date.localeCompare(b.date)||String(a.at).localeCompare(String(b.at)));const n={};for(const x of out){const y=x.date.slice(0,4);n[y]=(n[y]||0)+1;x.no=n[y]}return out}
+const entries=()=>ENTC||(ENTC=buildEntries());
+const coaNote=()=>`<p class="note" style="background:color-mix(in srgb,var(--warn) 10%,transparent);padding:8px 10px;border-radius:8px">رموز الحسابات الأساسية مؤقتة إلى أن يصل دليل الحسابات المعتمد. يمكن تعديلها من تبويب «دليل الحسابات» دون أن تتغير القيود.</p>`;
+function vJv(){if(!S.amon)S.amon=today().slice(0,7);const A=accMap();const L=entries().filter(x=>x.date.startsWith(S.amon));const td=L.reduce((s,x)=>s+x.lines.reduce((a,l)=>a+l.dr,0),0);
+  $("#v-jv").innerHTML=`<div class="vhead"><h2>القيود اليومية</h2><div class="acts">${canEditBase()?'<button class="btn gold" data-open="jvNew">＋ قيد يدوي</button>':""}${DL?'<button class="btn ghost" data-xl="jv">تصدير Excel</button>':""}</div></div>
+  <p class="note">تتولد القيود تلقائياً من كل عملية مالية: صرف السلف، والصرف المباشر، ومستندات الصرف التشغيلية، ومصادرة الضمانات. القيد اليدوي للتمويل الوارد والأرصدة الافتتاحية والتسويات. التصحيح يكون بقيد عكسي ولا يُحذف قيد.</p>${coaNote()}
+  <div class="filters"><label class="note" style="flex:0 0 auto">الشهر</label><input class="inp" type="month" id="amon" value="${esc(S.amon)}" style="flex:0 1 200px"></div>
+  <div class="summary"><span>عدد القيود: <b class="num">${fmt(L.length)}</b></span><span>مجموع المدين = مجموع الدائن: <b class="num">${fmt(td)}</b></span></div>
+  ${L.length?L.slice().reverse().slice(0,300).map(x=>`<div class="card" style="padding:12px"><h2 style="margin-bottom:8px"><span>قيد <span class="num">${x.no}</span> · <span class="num">${esc(x.date)}</span> <span class="pill s-info">${esc(x.src)}</span></span><small>${esc(x.ref)}</small></h2><p class="note" style="margin-bottom:8px">${esc(x.desc)}</p>
+    <div class="tbl-wrap" style="max-height:none"><table><thead><tr><th>الرمز</th><th>الحساب</th><th class="n">مدين</th><th class="n">دائن</th></tr></thead><tbody>${x.lines.map(l=>`<tr><td class="num">${esc(A[l.k]?.code||"؟")}</td><td style="${l.cr?"padding-inline-start:28px":""}">${esc(A[l.k]?.name||l.k)}</td><td class="n num">${l.dr?fmt(l.dr):""}</td><td class="n num">${l.cr?fmt(l.cr):""}</td></tr>`).join("")}</tbody></table></div>
+    ${x.src==="قيد يدوي"?jvActs(x):""}</div>`).join(""):`<div class="empty">لا توجد قيود في هذا الشهر.</div>`}`}
+function jvActs(x){const j=JVS.find(y=>y.at===x.at&&y.st!=="cancelled");if(!j||!canWrite())return "";
+  return S.jact===j._id?`<div class="iact" style="margin-top:8px"><input class="inp" id="jc_why" placeholder="سبب الإلغاء (مطلوب)"><div class="acts"><button class="btn danger sm" data-dojact="${j._id}">تأكيد إلغاء القيد</button><button class="btn ghost sm" data-canceljact="1">رجوع</button></div></div>`:`<div class="acts" style="margin-top:8px"><button class="btn danger sm" data-jact="${j._id}">إلغاء بقيد عكسي</button></div>`}
+function drJvNew(){if(!S.dr.lines)S.dr.lines=[{k:"",dr:"",cr:""},{k:"",dr:"",cr:""}];const A=accList();
+  $("#drawerHost").innerHTML=shell("قيد يدوي","مثل: التمويل الوارد من وزارة المالية، أو رصيد افتتاحي، أو تسوية",canWrite()?`<form class="fm" id="jvf">
+   <label>تاريخ القيد<input class="inp" id="jv_date" type="date" value="${esc(S.dr.date||today())}"></label><label>رقم المستند أو الكتاب<input class="inp" id="jv_ref" type="text" value="${esc(S.dr.ref||"")}"></label>
+   <label class="full">البيان<input class="inp" id="jv_desc" type="text" value="${esc(S.dr.desc||"")}"></label>
+   <div class="full tbl-wrap" style="max-height:none"><table><thead><tr><th>الحساب</th><th class="n">مدين</th><th class="n">دائن</th></tr></thead><tbody>
+   ${S.dr.lines.map((l,i)=>`<tr><td><select class="inp" id="jl_k_${i}"><option value="">— اختر الحساب —</option>${A.map(a=>`<option value="${esc(a.k)}" ${a.k===l.k?"selected":""}>${esc(a.code+" — "+a.name)}</option>`).join("")}</select></td><td><input class="inp num" id="jl_dr_${i}" value="${esc(l.dr)}" inputmode="numeric"></td><td><input class="inp num" id="jl_cr_${i}" value="${esc(l.cr)}" inputmode="numeric"></td></tr>`).join("")}
+   </tbody></table></div>
+   <div class="full acts"><button class="btn ghost sm" type="button" data-addjl="1">＋ سطر</button></div>
+   <div class="full netbox" id="jv_tot"></div>
+   <div class="full acts"><button class="btn gold" type="submit" id="jv_save">حفظ القيد</button><span class="fmsg" id="jv_msg"></span></div></form>`:wnote())}
+function jvRead(){const L=S.dr.lines.map((_,i)=>({k:$("#jl_k_"+i)?.value||"",dr:$("#jl_dr_"+i)?.value||"",cr:$("#jl_cr_"+i)?.value||""}));S.dr.lines=L;S.dr.date=val("jv_date");S.dr.ref=val("jv_ref");S.dr.desc=val("jv_desc");return L}
+function jvTot(){const box=$("#jv_tot");if(!box)return;const L=jvRead();const d=L.reduce((s,l)=>s+(toNum(l.dr)||0),0),c=L.reduce((s,l)=>s+(toNum(l.cr)||0),0);
+  box.innerHTML=`<span>مجموع المدين <b class="num">${fmt(d)}</b></span><span>مجموع الدائن <b class="num">${fmt(c)}</b></span><span>${Math.round(d)===Math.round(c)&&d>0?'<span class="pill s-done">متوازن</span>':`<span class="pill s-bad">الفرق ${fmt(d-c)}</span>`}</span>`}
+async function saveJv(ev){ev.preventDefault();const msg=$("#jv_msg");msg.className="fmsg err";const L=jvRead().map(l=>({k:l.k,dr:Math.round(toNum(l.dr)||0),cr:Math.round(toNum(l.cr)||0)})).filter(l=>l.k&&(l.dr||l.cr));
+  if(!yearOf(S.dr.date)){msg.textContent="أدخل تاريخ القيد.";return}if(!S.dr.desc){msg.textContent="اكتب بيان القيد.";return}
+  if(L.length<2){msg.textContent="القيد يحتاج سطرين على الأقل بحسابات ومبالغ.";return}if(L.some(l=>l.dr&&l.cr)){msg.textContent="السطر الواحد إما مدين أو دائن.";return}
+  const d=L.reduce((s,l)=>s+l.dr,0),c=L.reduce((s,l)=>s+l.cr,0);if(d!==c||!d){msg.textContent=`القيد غير متوازن: الفرق ${fmt(d-c)}.`;return}
+  $("#jv_save").disabled=true;const A=accMap();
+  try{await DB.collection("jvs").add({date:S.dr.date,ref:S.dr.ref,desc:S.dr.desc,lines:L,st:"active",at:new Date().toISOString(),by:await me()});
+    logA("قيد يدوي",{label:S.dr.ref||"قيد يدوي",amt:d,d:S.dr.desc+" · "+L.map(l=>`${A[l.k]?.code||""} ${l.dr?"مدين":"دائن"} ${fmt(l.dr||l.cr)}`).join(" | ")});toast("حُفظ القيد");S.amon=S.dr.date.slice(0,7);closeDrawer()}
+  catch(err){$("#jv_save").disabled=false;failMsg(msg,err)}}
+async function cancelJv(id,btn){const j=JVS.find(x=>x._id===id);const why=(btn.closest(".iact").querySelector("#jc_why").value||"").trim();if(!why){toast("اكتب سبب الإلغاء");return}
+  btn.disabled=true;try{await DB.collection("jvs").doc(id).update({st:"cancelled",cancelAt:new Date().toISOString(),cancelWhy:why,cancelBy:await me()});logA("إلغاء قيد يدوي",{label:j.ref||"",d:why});S.jact=null;toast("سُجّل قيد عكسي")}catch(err){btn.disabled=false;toast("تعذّر الحفظ")}}
+function ledgerRows(k,yr){let bal=0;const rows=[];for(const x of entries())for(const l of x.lines){if(l.k!==k)continue;if(x.date<yr+"-01-01"){bal+=l.dr-l.cr;continue}if(!x.date.startsWith(yr))continue;bal+=l.dr-l.cr;rows.push({x,l,bal})}
+  const open=rows.length?rows[0].bal-(rows[0].l.dr-rows[0].l.cr):bal;return {open,rows,close:bal}}
+function vLedger(){const A=accList();if(!S.lacc)S.lacc="BANK";if(!S.lyr)S.lyr=CUR_YEAR;const a=A.find(x=>x.k===S.lacc)||A[0];const G=ledgerRows(a.k,S.lyr);const yrs=[...new Set([CUR_YEAR,...entries().map(x=>x.date.slice(0,4))])].sort().reverse();
+  const bl=v=>v>=0?`${fmt(v)} مدين`:`${fmt(-v)} دائن`;
+  $("#v-ledger").innerHTML=`<div class="vhead"><h2>دفتر الأستاذ</h2>${DL?'<button class="btn ghost" data-xl="ledger">تصدير Excel</button>':""}</div>${coaNote()}
+  <div class="filters"><select class="inp" id="lacc">${A.map(x=>`<option value="${esc(x.k)}" ${x.k===a.k?"selected":""}>${esc(x.code+" — "+x.name)}</option>`).join("")}</select>
+   <select class="inp" id="lyr" style="flex:0 1 120px">${yrs.map(y=>`<option ${y===S.lyr?"selected":""}>${y}</option>`).join("")}</select></div>
+  <div class="kpis"><div class="kpi"><span class="l">رصيد أول السنة</span><span class="v num" style="font-size:18px">${bl(G.open)}</span></div><div class="kpi"><span class="l">مجموع المدين</span><span class="v num" style="font-size:18px">${fmt(G.rows.reduce((s,r)=>s+r.l.dr,0))}</span></div>
+   <div class="kpi"><span class="l">مجموع الدائن</span><span class="v num" style="font-size:18px">${fmt(G.rows.reduce((s,r)=>s+r.l.cr,0))}</span></div><div class="kpi"><span class="l">الرصيد الحالي</span><span class="v num" style="font-size:18px">${bl(G.close)}</span></div></div>
+  ${G.rows.length?`<div class="tbl-wrap cards"><table><thead><tr><th>التاريخ</th><th>قيد</th><th>البيان</th><th class="n">مدين</th><th class="n">دائن</th><th class="n">الرصيد</th></tr></thead><tbody>
+   ${G.rows.slice().reverse().slice(0,500).map(r=>`<tr><td data-l="التاريخ"><span class="num">${esc(r.x.date)}</span></td><td data-l="رقم القيد"><span class="num">${r.x.no}</span></td><td class="wide"><div>${esc(r.x.desc)}</div><div class="pco">${esc(r.x.src+(r.x.ref?" · "+r.x.ref:""))}</div></td><td class="n" data-l="مدين"><span class="num">${r.l.dr?fmt(r.l.dr):""}</span></td><td class="n" data-l="دائن"><span class="num">${r.l.cr?fmt(r.l.cr):""}</span></td><td class="n" data-l="الرصيد"><span class="num">${bl(r.bal)}</span></td></tr>`).join("")}
+  </tbody></table></div>`:`<div class="empty">لا توجد حركات على هذا الحساب في سنة ${esc(S.lyr)}.</div>`}`}
+function tbRows(mon){const A=accList();const st=mon+"-01";const R=Object.fromEntries(A.map(a=>[a.k,{a,op:0,dr:0,cr:0}]));
+  for(const x of entries())for(const l of x.lines){const r=R[l.k]||(R[l.k]={a:{k:l.k,code:"؟",name:l.k,t:"asset"},op:0,dr:0,cr:0});if(x.date<st)r.op+=l.dr-l.cr;else if(x.date.startsWith(mon)){r.dr+=l.dr;r.cr+=l.cr}}
+  return Object.values(R).filter(r=>r.op||r.dr||r.cr).sort((a,b)=>String(a.a.code).localeCompare(String(b.a.code),"en",{numeric:true}))}
+function vTb(){if(!S.amon)S.amon=today().slice(0,7);const R=tbRows(S.amon);const sp=v=>[v>0?v:0,v<0?-v:0];
+  const T=R.reduce((t,r)=>{const o=sp(r.op),c=sp(r.op+r.dr-r.cr);return [t[0]+o[0],t[1]+o[1],t[2]+r.dr,t[3]+r.cr,t[4]+c[0],t[5]+c[1]]},[0,0,0,0,0,0]);const ok=T[4]===T[5]&&T[2]===T[3];
+  $("#v-tb").innerHTML=`<div class="vhead"><h2>ميزان المراجعة</h2>${DL?'<button class="btn ghost" data-xl="tb">تصدير Excel</button>':""}</div>${coaNote()}
+  <div class="filters"><label class="note" style="flex:0 0 auto">الشهر</label><input class="inp" type="month" id="amon" value="${esc(S.amon)}" style="flex:0 1 200px"><span>${R.length?(ok?'<span class="pill s-done">الميزان متوازن</span>':'<span class="pill s-bad">الميزان غير متوازن</span>'):""}</span></div>
+  ${R.length?`<div class="tbl-wrap"><table><thead><tr><th>الرمز</th><th>الحساب</th><th class="n">أول المدة مدين</th><th class="n">أول المدة دائن</th><th class="n">حركة الشهر مدين</th><th class="n">حركة الشهر دائن</th><th class="n">آخر المدة مدين</th><th class="n">آخر المدة دائن</th></tr></thead><tbody>
+   ${R.map(r=>{const o=sp(r.op),c=sp(r.op+r.dr-r.cr);return `<tr data-ledger="${esc(r.a.k)}" style="cursor:pointer"><td class="num">${esc(r.a.code)}</td><td>${esc(r.a.name)}</td>${[o[0],o[1],r.dr,r.cr,c[0],c[1]].map(v=>`<td class="n num">${v?fmt(v):""}</td>`).join("")}</tr>`}).join("")}
+   <tr style="font-weight:700"><td></td><td>المجموع</td>${T.map(v=>`<td class="n num">${fmt(v)}</td>`).join("")}</tr></tbody></table></div>`:`<div class="empty">لا توجد حركات حتى نهاية هذا الشهر.</div>`}`}
+function vCoa(){const A=accList();$("#v-coa").innerHTML=`<div class="vhead"><h2>دليل الحسابات</h2>${canEditBase()?'<button class="btn" data-open="coa">تعديل الرموز والأسماء</button>':""}</div>${coaNote()}
+  <p class="note">حسابات النفقات تُنشأ تلقائياً: حساب لكل خطة استثمارية، وحساب لكل بند في الموازنة التشغيلية برمزه. الحسابات الأساسية (المصرف، الأمانات، الإيرادات، التمويل) تستخدمها القيود التلقائية.</p>
+  <div class="tbl-wrap cards"><table><thead><tr><th>الرمز</th><th>اسم الحساب</th><th>النوع</th><th>المصدر</th></tr></thead><tbody>${A.map(a=>`<tr data-ledger="${esc(a.k)}" style="cursor:pointer"><td data-l="الرمز"><span class="num">${esc(a.code)}</span></td><td class="wide pname">${esc(a.name)}</td><td data-l="النوع">${esc(ATYPE[a.t]||a.t)}</td><td data-l="المصدر"><span class="pill s-idle">${esc(a.src)}</span></td></tr>`).join("")}</tbody></table></div>`}
+function drCoa(){const A=accList().filter(a=>a.src!=="بند تشغيلي");
+  $("#drawerHost").innerHTML=shell("تعديل دليل الحسابات","رموز بنود الموازنة التشغيلية تُعدَّل من البند نفسه",canWrite()?`<form class="fm" id="coaf">
+   <div class="full tbl-wrap" style="max-height:none"><table><thead><tr><th>الرمز</th><th>اسم الحساب</th></tr></thead><tbody>${A.filter(a=>a.src!=="مضاف").map((a,i)=>`<tr><td><input class="inp num" data-coak="${esc(a.k)}" data-f="code" value="${esc(a.code)}"></td><td><input class="inp" data-coak="${esc(a.k)}" data-f="name" value="${esc(a.name)}"></td></tr>`).join("")}</tbody></table></div>
+   <div class="full" style="font-family:var(--f-head);font-weight:700">إضافة حساب (للقيود اليدوية)</div>
+   <label>الرمز<input class="inp num" id="cn_code"></label><label>الاسم<input class="inp" id="cn_name"></label><label>النوع<select class="inp" id="cn_t">${Object.entries(ATYPE).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></label>
+   <label class="full">سبب التعديل (مطلوب)<input class="inp" id="coa_why"></label>
+   <div class="full acts"><button class="btn" type="submit" id="coa_save">حفظ</button><span class="fmsg" id="coa_msg"></span></div></form>`:wnote())}
+async function saveCoa(ev){ev.preventDefault();const msg=$("#coa_msg");msg.className="fmsg err";const map={...(COA.map||{})};const base=accList();const B=Object.fromEntries(base.map(a=>[a.k,a]));const ch=[];
+  document.querySelectorAll("#coaf [data-coak]").forEach(i=>{const k=i.dataset.coak,f=i.dataset.f,v=i.value.trim();if(v&&v!==String(B[k]?.[f]??"")){map[k]={...(map[k]||{}),[f]:v};ch.push(`${B[k].code} ${f==="code"?"الرمز":"الاسم"}: ${B[k][f]} ← ${v}`)}});
+  const custom=[...(COA.custom||[])];if(val("cn_code")||val("cn_name")){if(!val("cn_code")||!val("cn_name")){msg.textContent="أدخل رمز الحساب الجديد واسمه.";return}if(base.some(a=>String(a.code)===val("cn_code"))){msg.textContent="الرمز مستخدم.";return}custom.push({code:val("cn_code"),name:val("cn_name"),t:val("cn_t")});ch.push("إضافة حساب "+val("cn_code")+" "+val("cn_name"))}
+  const codes=Object.values({...B,...Object.fromEntries(Object.entries(map).map(([k,v])=>[k,{...B[k],...v}]))}).map(a=>String(a.code));{const dup=codes.find((c,i)=>codes.indexOf(c)!==i);if(dup){msg.textContent=`الرمز ${dup} مستخدم لحسابين. غيّر أحدهما.`;return}}
+  if(!ch.length){msg.textContent="لم تغيّر شيئاً.";return}if(!val("coa_why")){msg.textContent="اكتب سبب التعديل.";return}
+  try{await DB.collection("settings").doc("coa").set({map,custom,at:new Date().toISOString(),by:await me()});logA("تعديل دليل الحسابات",{label:"المحاسبة",d:ch.join(" | ")+" · السبب: "+val("coa_why")});toast("حُفظ دليل الحسابات");closeDrawer()}catch(err){failMsg(msg,err)}}
+function opExport(X,wb,kind){const d=today();
+  if(kind==="opl"){const hdr=["ت","الرمز","الباب","الفصل","اسم البند","التخصيص","المصروف","المتاح","نسبة الصرف"];const R=opAgg(S.oyr||CUR_YEAR);const rows=R.map((r,i)=>[i+1,r.code,r.ch||"",r.sec||"",r.name,+r.alloc||0,r.spent,r.avail,r.alloc?r.spent/r.alloc:""]);
+    const t=hdr.map(()=>"");t[4]="المجموع";[5,6,7].forEach(j=>t[j]=rows.reduce((s,r)=>s+r[j],0));X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows,t],{total:1}),"الموازنة التشغيلية "+(S.oyr||CUR_YEAR));return `الموازنة التشغيلية ${S.oyr||CUR_YEAR}.xlsx`}
+  if(kind==="opx"){const hdr=["رقم المستند","السنة","التاريخ","رمز البند","اسم البند","الجهة المستفيدة","البيان","المبلغ الإجمالي","التأمينات","ضريبة الدخل","استقطاعات أخرى","المبلغ الصافي","رقم الصك","الحالة","سبب الإلغاء","المنفذ"];
+    const rows=OPX.filter(v=>String(v.yr)===String(S.oyr||CUR_YEAR)).sort((a,b)=>a.no-b.no).map(v=>[v.no,v.yr,v.date,v.code,opLine(v.yr,v.code)?.name||"",v.payee,v.desc||"",+v.gross||0,+v.ret||0,+v.tax||0,+v.oth||0,+v.net||0,v.ref||"",v.st==="cancelled"?"ملغى":"نافذ",v.cancelWhy||"",whoName(v.by)]);
+    X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows]),"مستندات الصرف");return `مستندات الصرف ${S.oyr||CUR_YEAR}.xlsx`}
+  if(kind==="emps"){const hdr=["ت",...EMP_F.map(f=>f.l),"صافي الراتب"];const rows=EMP.slice().sort((a,b)=>String(a.num).localeCompare(String(b.num),"en",{numeric:true})).map((e,i)=>[i+1,...EMP_F.map(f=>f.t==="num"?+e[f.k]||0:e[f.k]??""),empNet(e)]);
+    X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows]),"سجل الموظفين");return `سجل الموظفين ${d}.xlsx`}
+  if(kind==="jv"){const A=accMap();const hdr=["رقم القيد","التاريخ","المصدر","المرجع","البيان","رمز الحساب","اسم الحساب","مدين","دائن"];const rows=[];
+    for(const x of entries().filter(x=>x.date.startsWith(S.amon||today().slice(0,7))))for(const l of x.lines)rows.push([x.no,x.date,x.src,x.ref,x.desc,A[l.k]?.code||"",A[l.k]?.name||l.k,l.dr||"",l.cr||""]);
+    X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows]),"القيود اليومية");return `القيود اليومية ${S.amon||today().slice(0,7)}.xlsx`}
+  if(kind==="tb"){const mon=S.amon||today().slice(0,7);const hdr=["رمز الحساب","اسم الحساب","أول المدة مدين","أول المدة دائن","حركة الشهر مدين","حركة الشهر دائن","آخر المدة مدين","آخر المدة دائن"];const sp=v=>[v>0?v:0,v<0?-v:0];
+    const rows=tbRows(mon).map(r=>{const o=sp(r.op),c=sp(r.op+r.dr-r.cr);return [r.a.code,r.a.name,o[0],o[1],r.dr,r.cr,c[0],c[1]]});const t=["","المجموع",...[2,3,4,5,6,7].map(j=>rows.reduce((s,r)=>s+r[j],0))];
+    X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows,t],{total:1}),"ميزان المراجعة");return `ميزان المراجعة ${mon}.xlsx`}
+  if(kind==="ledger"){const a=accList().find(x=>x.k===(S.lacc||"BANK"));const G=ledgerRows(a.k,S.lyr||CUR_YEAR);const hdr=["التاريخ","رقم القيد","المصدر","المرجع","البيان","مدين","دائن","الرصيد"];
+    const rows=[["","","","","رصيد أول السنة","","",G.open],...G.rows.map(r=>[r.x.date,r.x.no,r.x.src,r.x.ref,r.x.desc,r.l.dr||"",r.l.cr||"",r.bal])];
+    X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows]),"دفتر الأستاذ");return `دفتر الأستاذ ${a.code} ${S.lyr||CUR_YEAR}.xlsx`}
+  return null}
+
+/* المجموعات والتنقل */
+const GROUPS={inv:{t:"الموازنة الاستثمارية",v:["dash","projects","advances","allocs","guar","alerts","companies"]},op:{t:"الموازنة التشغيلية",v:["op","opx","emps"]},acc:{t:"المحاسبة",v:["jv","ledger","tb","coa"]}};
+const COMMON=["reports","journal"];
+const TABN={dash:"لوحة القيادة",projects:"المشاريع",advances:"السلف",allocs:"التخصيصات",guar:"خطابات الضمان",alerts:"الإنذار المبكر",companies:"الشركات",op:"الأبواب والتخصيصات",opx:"مستندات الصرف",emps:"سجل الموظفين",jv:"القيود اليومية",ledger:"دفتر الأستاذ",tb:"ميزان المراجعة",coa:"دليل الحسابات",reports:"التقارير",journal:"سجل الحركات"};
+function renderNav(v){for(const [g,o] of Object.entries(GROUPS))if(o.v.includes(v))S.grp=g;if(!S.grp)S.grp="inv";
+  const cnt={advances:ADV.filter(a=>["raised","audited","ready","partial"].includes(a.stage)).length,guar:GU.filter(g=>g.st==="active"&&daysTo(g.exp)<=30).length,allocs:Object.values(ALLOC).filter(r=>r.yr===CUR_YEAR&&r.avail<0).length,alerts:E.filter(e=>e.al.some(a=>a==="over"||a==="fasakh"||a==="commit")).length,op:opAgg(CUR_YEAR).filter(r=>r.avail<0).length};
+  $("#groups").innerHTML=Object.entries(GROUPS).map(([g,o])=>`<button class="grp" data-grp="${g}" aria-pressed="${g===S.grp}">${o.t}</button>`).join("");
+  $("#tabs").innerHTML=[...GROUPS[S.grp].v,...COMMON].map(k=>`<a href="#${k}" aria-current="${k===v?"page":"false"}">${TABN[k]}${cnt[k]?`<span class="cnt${k==="advances"?" g":""}">${cnt[k]}</span>`:""}</a>`).join("")}
+
 /* التقارير */
 function vReports(){
   const xs=XSHEETS.map(s=>`«${s}»`).join(" و");
@@ -886,6 +1271,12 @@ function vReports(){
       <button class="btn" data-xl="alloc" ${DL?"":"disabled"}>تنزيل Excel</button></div>
     <div class="card"><h3>تقرير خطابات الضمان</h3><p>كل خطاب: المشروع والشركة والمصرف والمبلغ وتاريخ النفاذ والأيام المتبقية وعدد التمديدات والحالة، مرتبة حسب أقرب انتهاء.</p>
       <button class="btn" data-xl="guar" ${DL?"":"disabled"}>تنزيل Excel</button></div>
+    <div class="card"><h3>الموازنة التشغيلية</h3><p>البنود وتخصيصاتها ومصروفها ومتاحها، ومستندات الصرف بأرقامها، للسنة المختارة في تبويب الموازنة التشغيلية.</p>
+      <div class="acts"><button class="btn" data-xl="opl" ${DL?"":"disabled"}>البنود والتخصيصات</button><button class="btn ghost" data-xl="opx" ${DL?"":"disabled"}>مستندات الصرف</button></div></div>
+    <div class="card"><h3>سجل الموظفين</h3><p>كل الموظفين بالدرجة والمرحلة والراتب والمخصصات والاستقطاعات والصافي.</p>
+      <button class="btn" data-xl="emps" ${DL?"":"disabled"}>تنزيل Excel</button></div>
+    <div class="card"><h3>المحاسبة</h3><p>القيود اليومية وميزان المراجعة للشهر المختار، ودفتر الأستاذ للحساب المختار.</p>
+      <div class="acts"><button class="btn" data-xl="jv" ${DL?"":"disabled"}>القيود</button><button class="btn ghost" data-xl="tb" ${DL?"":"disabled"}>ميزان المراجعة</button><button class="btn ghost" data-xl="ledger" ${DL?"":"disabled"}>دفتر الأستاذ</button></div></div>
     <div class="card"><h3>سجل الحركات</h3><p>كل حركة في النظام: من نفّذها ومتى، والقيمة قبل التعديل وبعده، ومحاولات فتح التعديل.</p>
       <button class="btn" data-xl="audit" ${DL?"":"disabled"}>تنزيل Excel</button></div>
   </div>`;
@@ -942,7 +1333,7 @@ function shell(title,sub,body){return `<div class="scrim" id="scrim"></div><asid
 function renderDrawer(first){
   if(!S.dr){$("#drawerHost").innerHTML="";return}
   const sc=$("aside.drawer")?.scrollTop||0;
-  if(S.dr.kind==="project")drProject();else if(S.dr.kind==="newProject")drNewProject();else if(S.dr.kind==="newAdv"||S.dr.kind==="newG")drPickProject();else if(S.dr.kind==="newAlloc")drNewAlloc();else if(S.dr.kind==="alloc")drAlloc();else if(S.dr.kind==="unlock")drUnlock();else if(S.dr.kind==="chpw")drChpw();else if(S.dr.kind==="editAdv")drEditAdv();else if(S.dr.kind==="bulkPay")drBulk();
+  if(S.dr.kind==="project")drProject();else if(S.dr.kind==="newProject")drNewProject();else if(S.dr.kind==="newAdv"||S.dr.kind==="newG")drPickProject();else if(S.dr.kind==="newAlloc")drNewAlloc();else if(S.dr.kind==="alloc")drAlloc();else if(S.dr.kind==="unlock")drUnlock();else if(S.dr.kind==="chpw")drChpw();else if(S.dr.kind==="editAdv")drEditAdv();else if(S.dr.kind==="bulkPay")drBulk();else if(S.dr.kind==="opLine")drOpLine();else if(S.dr.kind==="opVoucher")drOpVoucher();else if(S.dr.kind==="emp")drEmp();else if(S.dr.kind==="import")drImport();else if(S.dr.kind==="jvNew")drJvNew();else if(S.dr.kind==="coa")drCoa();
   $("#xb").onclick=closeDrawer;$("#scrim").onclick=closeDrawer;
   const dw=$("aside.drawer");if(first)$("#xb").focus();else dw.scrollTop=sc;
   dw.addEventListener("input",()=>{S.dirty=true});
@@ -1068,6 +1459,14 @@ function bindForms(){
   const cpf=$("#cpf");if(cpf)cpf.onsubmit=doChpw;
   const eaf=$("#eaf");if(eaf)eaf.onsubmit=saveEditAdv;
   const lnf=$("#lnf");if(lnf)lnf.onsubmit=saveLoan;
+  const olf=$("#olf");if(olf)olf.onsubmit=saveOpLine;
+  const ovf=$("#ovf");if(ovf){ovf.onsubmit=saveVoucher;ovf.addEventListener("input",ovInfo);ovInfo()}
+  const emf=$("#emf");if(emf){emf.onsubmit=saveEmp;emf.addEventListener("input",()=>{const n=$("#em_net");if(n)n.textContent=fmt((money("em_base")||0)+(money("em_allow")||0)-(money("em_ded")||0))})}
+  const jvf=$("#jvf");if(jvf){jvf.onsubmit=saveJv;jvf.addEventListener("input",jvTot);jvf.addEventListener("change",jvTot);jvTot()}
+  const coaf=$("#coaf");if(coaf)coaf.onsubmit=saveCoa;
+  const imf=$("#imp_file");if(imf)imf.onchange=()=>{if(imf.files[0])impFile(imf.files[0])};
+  const ims=$("#imp_sheet");if(ims)ims.onchange=()=>{impLoadSheet(ims.value);S.dirty=false;renderDrawer()};
+  document.querySelectorAll("aside.drawer [data-map]").forEach(s=>s.onchange=()=>{S.imp.map[s.dataset.map]=+s.value;impCheck();S.dr.confirm=false;S.dirty=false;renderDrawer()});
   const bkf=$("#bkf");if(bkf){bkf.onsubmit=doBulk;bkf.addEventListener("input",bulkPrev);bkf.addEventListener("change",bulkPrev);bulkPrev()}
   const lf=$("#alf");if(lf){lf.onsubmit=saveAlloc;["l_kind","l_pl","l_yr"].forEach(i=>{$("#"+i).addEventListener("input",allocInfo);$("#"+i).addEventListener("change",allocInfo)});allocInfo()}
 }
@@ -1157,7 +1556,7 @@ function toast(m){const t=document.createElement("div");t.className="toast";t.te
 function loadXLSX(){if(window.XLSX)return Promise.resolve(window.XLSX);if(XLSXP)return XLSXP;
   XLSXP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=()=>ok(window.XLSX);s.onerror=()=>{XLSXP=null;no(new Error("load"))};document.head.appendChild(s)});return XLSXP}
 const rawMap=e=>Object.fromEntries(e.raw||[]);
-const isMoneyH=h=>!!h&&/القرض|المسدد|القائم|المصروف من|المتبقي من|مبلغ|الكلفة|المصروف|السلف|المتبقي|المستلم|جزء من|التخصيص|التعزيز|التخفيض|المناقلات|الالتزامات|المتاح/.test(h)&&!/رقم|الأيام|عدد/.test(h);
+const isMoneyH=h=>!!h&&/التأمينات|ضريبة|استقطاعات|الصافي|الراتب|المخصصات|الاستقطاعات|مدين|دائن|الرصيد|القرض|المسدد|القائم|المصروف من|المتبقي من|مبلغ|الكلفة|المصروف|السلف|المتبقي|المستلم|جزء من|التخصيص|التعزيز|التخفيض|المناقلات|الالتزامات|المتاح/.test(h)&&!/رقم|الأيام|عدد/.test(h);
 const isPctH=h=>!!h&&/نسبة/.test(h);
 function lastAdvNo(e){const a=e.advs.filter(x=>x.stage!=="rejected");if(!a.length){const r=rawMap(e)["رقم السلفة"];return r??""}const l=a[a.length-1];return l.final?"النهائية":l.no}
 function mainRow(e,i){const r=rawMap(e);return [i,e.st==="غير محددة"?"":e.st,e.pl,e.nm,e.co,e.c0||"",e.c||"",e.ap||"",e.c?e.sp/e.c:"",e.sp,lastAdvNo(e),e.pend||"",e.bank||"",e.sp+(e.bank||0),r["نسبة الإنجاز الفعلي"]??""]}
@@ -1204,8 +1603,8 @@ function advLogSheet(XLSX,list){const hdr=["ت","المصدر","اسم المش�
 async function exportXL(kind){
   if(!DL){toast("تنزيل الملفات غير متاح في هذا العرض");return}
   let XLSX;try{XLSX=await loadXLSX()}catch(_){toast("تعذّر تحميل مكتبة Excel. تحقق من الاتصال.");return}
-  const wb=newWB(XLSX);const d=today();let fn;
-  if(kind==="main"){XLSX.utils.book_append_sheet(wb,mainSheet(XLSX,E.filter(e=>e.src===SRC_MAIN)),"الموقف المالي");fn=`الموقف المالي ${d}.xlsx`}
+  const wb=newWB(XLSX);const d=today();let fn=opExport(XLSX,wb,kind);
+  if(fn){}else if(kind==="main"){XLSX.utils.book_append_sheet(wb,mainSheet(XLSX,E.filter(e=>e.src===SRC_MAIN)),"الموقف المالي");fn=`الموقف المالي ${d}.xlsx`}
   else if(kind==="all"){XLSX.utils.book_append_sheet(wb,mainSheet(XLSX,E,true),"الموقف الشامل");fn=`الموقف المالي الشامل ${d}.xlsx`}
   else if(kind==="list"){XLSX.utils.book_append_sheet(wb,mainSheet(XLSX,filtered(),true),"المشاريع");fn=`قائمة المشاريع ${d}.xlsx`}
   else if(kind==="adv"){for(const s of XSHEETS)XLSX.utils.book_append_sheet(wb,xSheet(XLSX,s,E.filter(e=>e.src==="ملف "+s)),s);
@@ -1239,26 +1638,39 @@ async function exportXL(kind){
   catch(err){if(err&&err.code!=="declined")toast("تعذّر حفظ الملف")}}
 
 /* التنقل */
-const VIEWS={dash:vDash,projects:vProjects,advances:vAdvances,allocs:vAllocs,guar:vGuar,reports:vReports,alerts:vAlerts,companies:vCompanies,journal:vJournal};
+const VIEWS={op:vOp,opx:vOpx,emps:vEmps,jv:vJv,ledger:vLedger,tb:vTb,coa:vCoa,dash:vDash,projects:vProjects,advances:vAdvances,allocs:vAllocs,guar:vGuar,reports:vReports,alerts:vAlerts,companies:vCompanies,journal:vJournal};
 function cur(){const h=location.hash.slice(1);return VIEWS[h]?h:"dash"}
 function render(){renderLock();const v=cur();const ae=document.activeElement;const keep=ae&&ae.id&&!ae.closest("aside")?{id:ae.id,s:ae.selectionStart}:null;
   for(const k in VIEWS)$("#v-"+k).hidden=k!==v;
-  document.querySelectorAll("#tabs a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+v?"page":"false"));
-  VIEWS[v]();
-  const n=E.filter(e=>e.al.some(a=>a==="over"||a==="fasakh"||a==="commit")).length;$("#alcnt").textContent=n||"";
-  const o=ADV.filter(a=>a.stage==="raised"||a.stage==="audited"||a.stage==="ready"||a.stage==="partial").length;$("#advcnt").textContent=o||"";
-  $("#gcnt").textContent=GU.filter(g=>g.st==="active"&&daysTo(g.exp)<=30).length||"";
-  $("#alloccnt").textContent=Object.values(ALLOC).filter(r=>r.yr===CUR_YEAR&&r.avail<0).length||"";
+  renderNav(v);VIEWS[v]();
   if(keep){const el=document.getElementById(keep.id);if(el&&el.focus){el.focus();try{if(keep.s!=null)el.setSelectionRange(keep.s,keep.s)}catch(_){}}}}
-function refreshAll(){recompute();render();
+function refreshAll(){recompute();ENTC=null;render();
   if(S.pendingOpen&&EM[S.pendingOpen]){const id=S.pendingOpen;S.pendingOpen=null;openDrawer({kind:"project",id});return}
   if(S.dr&&!S.dirty)renderDrawer()}
 function go(v){if(location.hash==="#"+v)render();else location.hash=v;window.scrollTo(0,0)}
 addEventListener("hashchange",render);
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],[data-open],[data-xl],[data-astage],[data-act],[data-doact],[data-cancelact],[data-advform],[data-pickp],[data-gact],[data-cancelgact],[data-dogact],[data-gform],[data-g5],[data-ayr],[data-alloc],[data-goproj],[data-gst],[data-enf],[data-unlock],[data-lock],[data-editadv],[data-legacy],[data-loanform],[data-lact],[data-dolact],[data-cancellact],#moreb");
+  const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],[data-open],[data-xl],[data-astage],[data-act],[data-doact],[data-cancelact],[data-advform],[data-pickp],[data-gact],[data-cancelgact],[data-dogact],[data-gform],[data-g5],[data-ayr],[data-alloc],[data-goproj],[data-gst],[data-enf],[data-unlock],[data-lock],[data-editadv],[data-legacy],[data-loanform],[data-lact],[data-dolact],[data-cancellact],[data-grp],[data-imp],[data-tpl],[data-oyr],[data-opline],[data-xact],[data-doxact],[data-cancelxact],[data-xmore],[data-emp],[data-emore],[data-jact],[data-dojact],[data-canceljact],[data-addjl],[data-undo],[data-impgo],[data-ledger],#moreb");
   if(!t)return;
+  if(t.dataset.grp){go(GROUPS[t.dataset.grp].v[0]);return}
+  if(t.dataset.imp){const d={kind:"import",imp:t.dataset.imp};S.imp=null;IMPWB=null;if(!isUnlocked()){S.after=d;openDrawer({kind:"unlock"});return}openDrawer(d);return}
+  if(t.dataset.tpl){impTemplate(t.dataset.tpl);return}
+  if(t.dataset.oyr){S.oyr=t.dataset.oyr;render();return}
+  if(t.dataset.opline){openDrawer({kind:"opLine",id:t.dataset.opline});return}
+  if(t.dataset.xact){S.xact=t.dataset.xact;vOpx();setTimeout(()=>$("#xc_why")?.focus(),0);return}
+  if(t.dataset.cancelxact){S.xact=null;vOpx();return}
+  if(t.dataset.doxact){cancelVoucher(t.dataset.doxact,t);return}
+  if(t.dataset.xmore){S.xshown=(S.xshown||200)+300;vOpx();return}
+  if(t.dataset.emp){openDrawer({kind:"emp",num:t.dataset.emp});return}
+  if(t.dataset.emore){S.eshown=(S.eshown||150)+300;vEmps();return}
+  if(t.dataset.jact){S.jact=t.dataset.jact;vJv();return}
+  if(t.dataset.canceljact){S.jact=null;vJv();return}
+  if(t.dataset.dojact){cancelJv(t.dataset.dojact,t);return}
+  if(t.dataset.addjl){jvRead();S.dr.lines.push({k:"",dr:"",cr:""});renderDrawer();return}
+  if(t.dataset.undo){impUndo(t.dataset.undo,t);return}
+  if(t.dataset.impgo){impGo(t);return}
+  if(t.dataset.ledger){S.lacc=t.dataset.ledger;closeDrawer();go("ledger");return}
   if(t.dataset.xl){exportXL(t.dataset.xl);return}
   if(t.dataset.unlock){S.after=S.dr&&S.dr.kind!=="unlock"?{...S.dr}:null;openDrawer({kind:"unlock"});return}
   if(t.dataset.lock){doLock(false);return}
@@ -1302,9 +1714,17 @@ let qt;document.addEventListener("input",ev=>{const id=ev.target.id;
   if(id==="ip_pct"||id==="ip_amt"){const box=ev.target.closest(".iact");const g=+box.dataset.gross,rem=+box.dataset.rem;const v=toNum(ev.target.value);
     if(id==="ip_pct")box.querySelector("#ip_amt").value=isFinite(v)&&ev.target.value!==""?fmt(Math.min(rem,Math.round(g*v/100))):"";
     else box.querySelector("#ip_pct").value=isFinite(v)&&g&&ev.target.value!==""?+(v/g*100).toFixed(2):""}
+  if(id==="xq"){clearTimeout(qt);qt=setTimeout(()=>{S.xq=ev.target.value;vOpx();const q=$("#xq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
+  if(id==="eq"){clearTimeout(qt);qt=setTimeout(()=>{S.eq=ev.target.value;vEmps();const q=$("#eq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="gq"){clearTimeout(qt);qt=setTimeout(()=>{S.gq=ev.target.value;vGuar();const q=$("#gq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="aq"){clearTimeout(qt);qt=setTimeout(()=>{S.aq=ev.target.value;vAdvances();const q=$("#aq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}});
 document.addEventListener("change",ev=>{const id=ev.target.id;
+  if(id==="xcode"){S.xcode=ev.target.value;vOpx()}
+  if(id==="edept"){S.edept=ev.target.value;vEmps()}
+  if(id==="est"){S.est=ev.target.value;vEmps()}
+  if(id==="amon"){S.amon=ev.target.value||today().slice(0,7);render()}
+  if(id==="lacc"){S.lacc=ev.target.value;vLedger()}
+  if(id==="lyr"){S.lyr=ev.target.value;vLedger()}
   if(id==="fplan"){S.plan=ev.target.value;S.shown=60;vProjects()}
   if(id==="fst"){S.st=ev.target.value;S.shown=60;vProjects()}
   if(id==="fsort"){S.sort=ev.target.value;vProjects()}});
@@ -1319,7 +1739,7 @@ recompute();render();
   claude.use("user").then(async u=>{USER=u;if(u){try{UID=await u.id()}catch(_){}try{CANW=await u.can("data.write")}catch(_){}render();if(S.dr&&!S.dirty)renderDrawer()}}).catch(()=>{});
   const db=await claude.use("db").catch(()=>null);
   if(!db){clearTimeout(timer);DB=false;sync.textContent="الحفظ المشترك غير متاح";render();return}
-  const got={txns:false,advances:false,projects:false,allocs:false,guarantees:false,loans:false,log:false};
+  const got={txns:false,advances:false,projects:false,allocs:false,guarantees:false,loans:false,log:false,oplines:false,opexp:false,emps:false,jvs:false,imports:false};
   const resolveNames=async()=>{const ids=[...new Set([...TX.map(t=>t.by),...NP.map(p=>p.by),...ADV.flatMap(a=>(a.hist||[]).map(h=>h.by)),...AL.map(a=>a.by),...GU.flatMap(g=>(g.hist||[]).map(h=>h.by)),...(SET.hist||[]).map(h=>h.by),...LO.map(l=>l.by),...LOG.map(l=>l.by)].filter(x=>x&&!NAMES[x]))];
     if(USER&&ids.length&&USER.profiles){try{const ps=await USER.profiles(ids.slice(0,64));for(const i of ids)NAMES[i]=(ps[i]&&ps[i].name)||"مستخدم";if(cur()==="journal")vJournal()}catch(_){}}};
   const onData=()=>{clearTimeout(timer);DB=db;const ok=Object.values(got).every(Boolean);
@@ -1327,6 +1747,13 @@ recompute();render();
   const fail=()=>{clearTimeout(timer);DB=false;sync.textContent="تعذّر الاتصال بقاعدة البيانات";render()};
   db.collection("txns").orderBy("at","desc").limit(1000).onSnapshot(s=>{TX=s.docs.map(d=>({_id:d.id,...d.data()})).filter(t=>t&&t.pid);got.txns=true;onData()},fail);
   db.collection("advances").orderBy("at","desc").limit(1000).onSnapshot(s=>{ADV=s.docs.map(d=>({_id:d.id,...d.data()})).filter(a=>a&&a.pid);got.advances=true;onData()},fail);
+  const L1=(c,k,f)=>db.collection(c).orderBy("at","desc").limit(1000).onSnapshot(s=>{f(s.docs.map(d=>({_id:d.id,...d.data()})));got[k]=true;onData()},fail);
+  L1("oplines","oplines",a=>{OPL=a.filter(l=>l&&l.code)});
+  L1("opexp","opexp",a=>{OPX=a.filter(v=>v&&v.code)});
+  L1("jvs","jvs",a=>{JVS=a.filter(j=>j&&j.lines)});
+  L1("imports","imports",a=>{IMPB=a});
+  db.collection("emps").orderBy("i","asc").limit(1000).onSnapshot(s=>{EMPC=s.docs.map(d=>({_id:d.id,...d.data()})).sort((a,b)=>(+a.i)-(+b.i));EMP=EMPC.flatMap(c=>c.rows||[]);got.emps=true;onData()},fail);
+  db.collection("settings").doc("coa").onSnapshot(s=>{const d=(s.exists&&s.data())||{};COA={map:d.map||{},custom:d.custom||[]};refreshAll()},()=>{});
   db.collection("loans").orderBy("at","desc").limit(1000).onSnapshot(s=>{LO=s.docs.map(d=>({_id:d.id,...d.data()})).filter(l=>l&&l.pid);got.loans=true;onData()},fail);
   db.collection("log").orderBy("at","desc").limit(1000).onSnapshot(s=>{LOG=s.docs.map(d=>({_id:d.id,...d.data()})).filter(l=>l&&l.act);got.log=true;onData()},fail);
   db.collection("allocs").orderBy("at","desc").limit(1000).onSnapshot(s=>{AL=s.docs.map(d=>({_id:d.id,...d.data()})).filter(a=>a&&a.pl&&a.yr);got.allocs=true;onData()},fail);
