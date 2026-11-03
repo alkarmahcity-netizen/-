@@ -44,6 +44,7 @@ nav.tabs a{color:var(--head-muted);text-decoration:none;padding:9px 13px 10px;bo
 nav.tabs a[aria-current="page"]{color:var(--head-ink);border-bottom-color:var(--gold);font-weight:700}
 nav.tabs a .cnt{font-size:11px;background:var(--bad);color:#fff;border-radius:99px;padding:0 6px;margin-inline-start:4px}
 nav.tabs a .cnt.g{background:var(--gold)}
+nav.tabs a .cnt:empty{display:none}
 
 main{padding-block:18px 60px}
 .view{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
@@ -197,6 +198,7 @@ details.card[open] summary{margin-bottom:12px}
 .chg{font-size:12px;color:var(--muted)}
 .chg b{color:var(--ink);font-weight:500}
 .toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));inset-inline-start:50%;transform:translateX(50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;z-index:60;font-size:14px;max-width:calc(100% - 32px)}
+.enf h2 .btn{margin-inline-start:auto}
 .foot{font-size:12px;color:var(--muted);text-align:center;padding-block:10px}
 @media (prefers-reduced-motion:no-preference){aside.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(-24px);opacity:.6}}}
 </style>
@@ -215,6 +217,8 @@ details.card[open] summary{margin-bottom:12px}
     <a href="#dash">لوحة القيادة</a>
     <a href="#projects">المشاريع</a>
     <a href="#advances">السلف<span class="cnt g" id="advcnt"></span></a>
+    <a href="#allocs">التخصيصات<span class="cnt" id="alloccnt"></span></a>
+    <a href="#guar">خطابات الضمان<span class="cnt" id="gcnt"></span></a>
     <a href="#reports">التقارير</a>
     <a href="#alerts">الإنذار المبكر<span class="cnt" id="alcnt"></span></a>
     <a href="#companies">الشركات</a>
@@ -226,6 +230,8 @@ details.card[open] summary{margin-bottom:12px}
   <section class="view" id="v-dash"></section>
   <section class="view" id="v-projects" hidden></section>
   <section class="view" id="v-advances" hidden></section>
+  <section class="view" id="v-allocs" hidden></section>
+  <section class="view" id="v-guar" hidden></section>
   <section class="view" id="v-reports" hidden></section>
   <section class="view" id="v-alerts" hidden></section>
   <section class="view" id="v-companies" hidden></section>
@@ -267,6 +273,15 @@ const NEXT={raised:"audited",audited:"ready",ready:"paid"};
 const NEXT_LBL={raised:"تأكيد التدقيق",audited:"اعتماد للصرف",ready:"تأشير الصرف"};
 const ORD=["الأولى","الثانية","الثالثة","الرابعة","الخامسة","السادسة","السابعة","الثامنة","التاسعة","العاشرة","الحادية عشرة","الثانية عشرة"];
 const advLabel=a=>a.final?"النهائية":(ORD[a.no-1]||("رقم "+a.no));
+const ALK={base:"تخصيص أصلي",add:"تعزيز",cut:"تخفيض",tout:"مناقلة إلى خطة أخرى",tin:"مناقلة من خطة أخرى"};
+const GKINDS=["ضمان حسن التنفيذ","ضمان السلفة التشغيلية","ضمان العطاء (دخول المناقصة)","ضمان الصيانة","أخرى"];
+const GST={active:{t:"نافذ",c:"s-done"},released:{t:"مُعاد للشركة",c:"s-idle"},seized:{t:"مُصادَر",c:"s-bad"}};
+const GACT={add:"تسجيل خطاب ضمان",extend:"تمديد خطاب ضمان",release:"إعادة ضمان للشركة",seize:"مصادرة ضمان"};
+const BANKS=["مصرف الرافدين","مصرف الرشيد","المصرف العراقي للتجارة","المصرف الزراعي التعاوني","المصرف الصناعي","مصرف النهرين الإسلامي"];
+const daysTo=d=>d?Math.round((new Date(d+"T00:00:00")-new Date(today()+"T00:00:00"))/864e5):null;
+const addDays=(d,n)=>{const x=new Date((d||today())+"T00:00:00");x.setDate(x.getDate()+n);return x.toISOString().slice(0,10)};
+const yearOf=d=>{const y=String(d||"").slice(0,4);return /^\d{4}$/.test(y)?y:""};
+const gBucket=g=>{if(g.st!=="active")return g.st;const d=daysTo(g.exp);return d<0?"expired":d<=30?"soon":"ok"};
 const STATUS_BASE=["منجز","قيد التنفيذ","متلكئ","متوقف","فسخ عقد","فسخ عقد (منجز)","قيد إجراء التسوية","انتفاء حاجة"];
 const EDITABLE={
  nm:{l:"اسم المشروع",full:1},co:{l:"اسم الشركة",full:1},pl:{l:"اسم الخطة",list:"dl-plans"},st:{l:"حالة المشروع",list:"dl-st"},
@@ -289,13 +304,20 @@ const RULES=[
  {id:"chg",sev:"warn",t:"أوامر تغيير تزيد على 20% من العقد",d:"ارتفع مبلغ العقد أكثر من 20% عن مبلغه الأصلي.",f:p=>p.c0>0&&p.c>p.c0*1.2},
  {id:"done0",sev:"warn",t:"مشروع منجز بلا صرف",d:"حالته منجز ولم يُسجَّل عليه أي صرف. قد يكون خطأ إدخال.",f:p=>p.st==="منجز"&&!p.sp},
  {id:"sod",sev:"warn",t:"سلف تجاوزت فصل المهام",d:"شخص واحد نفّذ أكثر من مرحلة على السلفة نفسها (رفع ثم تدقيق مثلاً). مقبول في التجربة فقط.",f:p=>p.advs.some(a=>(a.hist||[]).some(h=>h.self))},
+ {id:"gexp",sev:"bad",t:"خطابات ضمان منتهية ولم تُمدد",d:"انتهى نفاذ الخطاب والمشروع ما زال قائماً. المحافظة الآن بلا غطاء: اطلب التمديد فوراً.",f:p=>p.gs.some(g=>g.st==="active"&&daysTo(g.exp)<0)},
+ {id:"gfasakh",sev:"bad",t:"عقد مفسوخ وضمانه ما زال نافذاً",d:"يجب مخاطبة المصرف لمصادرة الضمان لصالح المحافظة قبل انتهاء نفاذه.",f:p=>p.st.includes("فسخ")&&!p.st.includes("منجز")&&p.gs.some(g=>g.st==="active")},
+ {id:"gsoon",sev:"warn",t:"خطابات ضمان تنتهي خلال 30 يوماً",d:"اطلب من الشركة تمديد الخطاب أو خاطب المصرف قبل انتهائه.",f:p=>p.gs.some(g=>g.st==="active"&&daysTo(g.exp)>=0&&daysTo(g.exp)<=30)},
+ {id:"overalloc",sev:"warn",t:"التزامات حُفظت متجاوزة التخصيص",d:"عقود أو أوامر غيار حُفظت أثناء تعطيل الرقابة على التخصيصات، وتحتاج إلى تعزيز التخصيص.",f:p=>(p.isNew&&p.overAlloc)||p.tx.some(t=>t.overAlloc)},
+ {id:"glow",sev:"info",t:"ضمان حسن التنفيذ أقل من 5% من العقد",d:"مجموع ضمانات حسن التنفيذ النافذة أقل من 5% من مبلغ العقد بعد التغيير.",f:p=>{const s=p.gs.filter(g=>g.kind==="ضمان حسن التنفيذ"&&g.st==="active").reduce((a,g)=>a+(+g.amt||0),0);return s>0&&s<p.c*0.05-1}},
+ {id:"gnoperf",sev:"info",t:"مشاريع جديدة بلا ضمان حسن تنفيذ",d:"مشروع أضيف في النظام ولم يُسجَّل له ضمان حسن تنفيذ.",f:p=>p.isNew&&!p.gs.some(g=>g.kind==="ضمان حسن التنفيذ"&&g.st!=="released")},
  {id:"pend",sev:"info",t:"سلف بانتظار الصرف",d:"مبالغ سلف مستحقة لم تُصرف بعد (رصيد Excel مع السلف المرفوعة في النظام).",f:p=>p.pend>0},
  {id:"nost",sev:"info",t:"حالة المشروع غير محددة",d:"لا توجد حالة مسجلة. يمكن تحديدها من «تعديل بيانات المشروع».",f:p=>p.st==="غير محددة"},
  {id:"noc",sev:"info",t:"مبلغ العقد غير مدخل",d:"لا يوجد مبلغ عقد، فلا يمكن حساب نسبة الصرف ولا قبول سلف.",f:p=>!p.c},
 ];
 
 /* الحالة */
-const S={src:"الكل",q:"",plan:"",st:"",sort:"c",co:"",rule:"",shown:60,cq:"",aq:"",astage:"open",dr:null,act:null,dirty:false,advForm:false};
+const S={src:"الكل",q:"",plan:"",st:"",sort:"c",co:"",rule:"",shown:60,cq:"",aq:"",astage:"open",dr:null,act:null,dirty:false,advForm:false,ayr:"",gst:"active",gq:"",gact:null,gForm:false};
+let AL=[],GU=[],SET={enforce:true,hist:[]},ALLOC={};
 let TX=[],ADV=[],NP=[],E=[],EM={},DB=null,USER=null,UID="",CANW=null,DL=null,NAMES={},XLSXP=null;
 let SOURCES=["الكل"];
 
@@ -306,9 +328,9 @@ function baseAdvCount(p){
 
 function recompute(){
   const np=NP.map(d=>({id:d._id,src:d.src||SRC_MAIN,st:d.st||"غير محددة",pl:d.pl||"غير محددة",nm:d.nm||"مشروع بلا اسم",co:d.co||"—",
-    c0:+d.c0||0,c:+d.c||+d.c0||0,ap:+d.ap||0,sp:0,adv:0,bank:0,fin:0,cno:d.cno||null,cdt:d.cdt||null,sdt:d.sdt||null,dur:+d.dur||0,ext:0,yrs:[],raw:[],isNew:true,at:d.at,by:d.by}));
+    c0:+d.c0||0,c:+d.c||+d.c0||0,ap:+d.ap||0,sp:0,adv:0,bank:0,fin:0,cno:d.cno||null,cdt:d.cdt||null,sdt:d.sdt||null,dur:+d.dur||0,ext:0,yrs:[],raw:[],isNew:true,overAlloc:!!d.overAlloc,at:d.at,by:d.by}));
   const all=[...BASE,...np];
-  const txBy=group(TX,"pid"),advBy=group(ADV,"pid");
+  const txBy=group(TX,"pid"),advBy=group(ADV,"pid"),guBy=group(GU,"pid");
   E=all.map(p=>{const e={...p};e.tx=txBy[p.id]||[];
     e.advs=(advBy[p.id]||[]).slice().sort((a,b)=>((a.final?999:a.no)-(b.final?999:b.no))||String(a.at).localeCompare(String(b.at)));
     const ev=[...e.tx.map(t=>({at:t.at||"",t})),...e.advs.filter(a=>a.stage==="paid").map(a=>({at:a.paidAt||a.at||"",a}))].sort((x,y)=>x.at.localeCompare(y.at));
@@ -325,9 +347,11 @@ function recompute(){
     e.pend=Math.max(0,e.adv||0)+e.pendNew;
     e.baseAdvN=baseAdvCount(p);
     e.rate=e.c>0?e.sp/e.c:null;
+    e.gs=(guBy[p.id]||[]).slice().sort((a,b)=>String(a.exp).localeCompare(String(b.exp)));
     e.al=RULES.filter(r=>r.f(e)).map(r=>r.id);
     e.k=norm(e.nm+" "+e.co+" "+(e.cno||""));e.ck=coKey(e.co);return e});
   EM=Object.fromEntries(E.map(e=>[e.id,e]));
+  ALLOC=allocAgg();
   SOURCES=["الكل",...new Set(E.map(p=>p.src))];
 }
 const inSrc=e=>S.src==="الكل"||e.src===S.src;
@@ -362,6 +386,19 @@ function vDash(){
     ${A.length?`<div class="kpis">${pipe.map(p=>`<button class="kpi" data-astage="${p.s}"><span class="l"><span class="pill ${STAGES[p.s].c}">${STAGES[p.s].t}</span></span><span class="v num">${fmt(p.n)}</span><span class="s">${big(p.v)} د.ع</span></button>`).join("")}</div>`
     :`<p class="note">لم تُسجَّل سلف في النظام بعد. افتح أي مشروع واضغط «إضافة سلفة جديدة»، أو ابدأ من تبويب <a href="#advances" style="color:var(--accent)">السلف</a>.</p>`}
   </div>
+  ${(()=>{const AY=Object.values(ALLOC).filter(r=>r.yr===CUR_YEAR);const AT=AY.reduce((t,r)=>({a:t.a+r.alloc,c:t.c+r.com}),{a:0,c:0});
+    const GA=GU.filter(g=>EM[g.pid]&&inSrc(EM[g.pid]));const gb=k=>GA.filter(g=>gBucket(g)===k);
+    return `<div class="grid2">
+    <div class="card"><h2>تخصيصات ${CUR_YEAR} <small><a href="#allocs" style="color:var(--accent)">التفاصيل</a></small></h2>
+     ${AY.length?`<div class="figs"><div class="fig"><div class="l">التخصيص</div><div class="v num">${fmt(AT.a)}</div></div><div class="fig"><div class="l">الالتزامات</div><div class="v num">${fmt(AT.c)}</div></div><div class="fig hl"><div class="l">المتاح</div><div class="v num" style="${AT.a-AT.c<0?"color:var(--bad)":""}">${fmt(AT.a-AT.c)}</div></div></div>
+      <div class="track" style="height:12px;margin-top:10px"><i style="width:${Math.min(100,AT.a?AT.c/AT.a*100:100)}%;${AT.c>AT.a?"background:var(--bad)":""}"></i></div>
+      <p class="note" style="margin-top:6px">نسبة الاستخدام ${pct(AT.a?AT.c/AT.a:null)}${AY.filter(r=>r.avail<0).length?` · <b style="color:var(--bad)">${AY.filter(r=>r.avail<0).length} خطة متجاوزة</b>`:""}</p>`
+     :`<p class="note">لم تُدخل تخصيصات لهذه السنة بعد. أدخلها من تبويب <a href="#allocs" style="color:var(--accent)">التخصيصات</a> حتى يبدأ النظام بمراقبة العقود وأوامر الغيار.</p>`}
+    </div>
+    <div class="card"><h2>خطابات الضمان <small><a href="#guar" style="color:var(--accent)">التفاصيل</a></small></h2>
+     ${GA.length?`<div class="stlist">${[["expired","منتهية ولم تُمدد","s-bad"],["soon","تنتهي خلال 30 يوماً","s-warn"],["ok","نافذة","s-done"],["seized","مُصادَرة","s-bad"]].map(([k,l,c])=>`<button class="strow" data-gst="${k==="ok"?"active":k}"><span class="pill ${c}">${l}</span><span class="n">${big(gb(k).reduce((s,g)=>s+(+g.amt||0),0))}</span><b class="num">${fmt(gb(k).length)}</b></button>`).join("")}</div>`
+     :`<p class="note">لم تُسجَّل خطابات ضمان بعد. سجّلها من بطاقة المشروع أو من تبويب <a href="#guar" style="color:var(--accent)">خطابات الضمان</a>.</p>`}
+    </div></div>`})()}
   <div class="grid2">
     <div class="card"><h2>العقود والصرف حسب الخطة <small>اضغط على الخطة لعرض مشاريعها</small></h2>
       <div class="bars">${pl.map(([k,v])=>`<div class="bar" role="button" tabindex="0" data-plan="${esc(k)}" style="cursor:pointer">
@@ -468,6 +505,169 @@ function vAdvances(){
    :`<div class="empty">${A.length?"لا توجد سلف في هذه المرحلة.":"لم تُسجَّل أي سلفة بعد. اضغط «إضافة سلفة جديدة» واختر المشروع، ثم أدخل مبلغ السلفة والاستقطاعات."}</div>`}`;
 }
 
+/* التخصيصات */
+function emptyAgg(pl,yr){return {pl,yr,base:0,add:0,cut:0,tr:0,alloc:0,com:0,spent:0,avail:0,items:[],moves:[]}}
+function allocAgg(){const A={};const k=(pl,yr)=>{const key=pl+"|"+yr;return A[key]=A[key]||emptyAgg(pl,yr)};
+  for(const a of AL){const r=k(a.pl,a.yr);const v=+a.amt||0;r.alloc+=v;r.moves.push(a);if(a.kind==="base")r.base+=v;else if(a.kind==="add")r.add+=v;else if(a.kind==="cut")r.cut+=v;else r.tr+=v}
+  for(const p of NP){const e=EM[p._id];if(!e)continue;const yr=yearOf(p.cdt)||yearOf(p.at);const r=k(e.pl,yr);r.com+=+p.c0||0;r.items.push({pid:e.id,kind:"عقد جديد",amt:+p.c0||0,date:p.cdt||String(p.at).slice(0,10)})}
+  for(const t of TX){const e=EM[t.pid];if(!e)continue;let amt=0,kind="";
+    if(t.type==="change"){amt=+t.amt||0;kind="أمر غيار"}else if(t.type==="edit"&&t.changes&&t.changes.c){amt=(+t.changes.c.to||0)-(+t.changes.c.from||0);kind="تعديل مبلغ العقد"}
+    if(!amt)continue;const r=k(e.pl,yearOf(t.date)||yearOf(t.at));r.com+=amt;r.items.push({pid:e.id,kind,amt,date:t.date})}
+  for(const e of E){const add=(y,v)=>{const r=A[e.pl+"|"+y];if(r&&v)r.spent+=v};
+    for(const a of e.advs)if(a.stage==="paid")add(yearOf(a.paidDate||a.paidAt),+a.gross||0);
+    for(const t of e.tx)if(t.type==="pay")add(yearOf(t.date),+t.amt||0);
+    const cy=(e.yrs||[]).find(y=>y[0]==="السنة الحالية");if(cy)add(CUR_YEAR,cy[1])}
+  for(const r of Object.values(A))r.avail=r.alloc-r.com;return A}
+function allocCheck(pl,yr,amt){if(!(amt>0))return null;const r=ALLOC[pl+"|"+yr];
+  if(r&&r.moves.length&&amt<=r.avail)return null;
+  const why=!r||!r.moves.length?`لا يوجد تخصيص لخطة «${pl}» لسنة ${yr}.`:`المبلغ ${fmt(amt)} د.ع يتجاوز المتاح من تخصيص «${pl}» لسنة ${yr} وهو ${fmt(r.avail)} د.ع.`;
+  return SET.enforce?{block:true,msg:"مرفوض: "+why+" أضف تخصيصاً أو تعزيزاً من تبويب «التخصيصات» أولاً."}:{block:false,msg:why+" الرقابة معطلة، فسيُحفظ ويُسجَّل استثناءً."}}
+async function toggleEnf(){if(!canWrite())return;const nv=!SET.enforce;
+  try{await DB.collection("settings").doc("main").set({enforce:nv,at:new Date().toISOString(),by:await me(),hist:[...(SET.hist||[]),{enforce:nv,by:await me(),at:new Date().toISOString()}]});toast(nv?"فُعّلت الرقابة على التخصيصات":"عُطّلت الرقابة على التخصيصات")}catch(err){toast("تعذّر الحفظ")}}
+function vAllocs(){
+  if(!S.ayr)S.ayr=CUR_YEAR;
+  const yrs=[...new Set([CUR_YEAR,S.ayr,...Object.values(ALLOC).map(r=>r.yr)])].filter(Boolean).sort().reverse();
+  const R=Object.values(ALLOC).filter(r=>r.yr===S.ayr).sort((a,b)=>b.alloc-a.alloc||b.com-a.com);
+  const T=R.reduce((t,r)=>({a:t.a+r.alloc,c:t.c+r.com,s:t.s+r.spent}),{a:0,c:0,s:0});
+  $("#v-allocs").innerHTML=`
+  <div class="vhead"><h2>التخصيصات حسب الخطة والسنة</h2><div class="acts">${canWrite()?'<button class="btn gold" data-open="newAlloc">＋ تخصيص أو تعزيز أو مناقلة</button>':""}${DL?'<button class="btn ghost" data-xl="alloc">تقرير التخصيصات (Excel)</button>':""}</div></div>
+  <div class="card enf"><h2><span>الرقابة على التخصيصات: ${SET.enforce?'<span class="pill s-done">مفعّلة</span>':'<span class="pill s-bad">معطّلة</span>'}</span>${canWrite()?`<button class="btn ghost sm" data-enf="1">${SET.enforce?"تعطيل الرقابة":"تفعيل الرقابة"}</button>`:""}</h2>
+   <p class="note">${SET.enforce?"لا يقبل النظام أي عقد جديد أو أمر غيار أو زيادة في مبلغ العقد إلا إذا كان في تخصيص الخطة لتلك السنة مبلغ متاح يكفيه. هذا مبدأ «لا التزام بلا تخصيص».":"تُحفظ العقود وأوامر الغيار حتى لو تجاوزت التخصيص، وتُسجَّل استثناءً يظهر في الإنذار المبكر."}</p>
+   <p class="note" style="margin-top:6px">ما يُخصم من التخصيص: مبالغ العقود الجديدة المضافة في النظام (حسب سنة تاريخ العقد)، وأوامر الغيار وزيادات مبالغ العقود المسجلة في النظام (حسب تاريخها). عقود ملفات Excel السابقة لا تُخصم لأنها مموّلة من تخصيصات سنواتها.</p></div>
+  <div class="srcbar"><span>السنة المالية:</span>${yrs.map(y=>`<button class="chip" data-ayr="${y}" aria-pressed="${y===S.ayr}">${y}</button>`).join("")}</div>
+  <div class="kpis">
+   <div class="kpi"><span class="l">التخصيص النهائي</span><span class="v">${big(T.a)}</span><span class="s">${R.length} خطة</span></div>
+   <div class="kpi"><span class="l">الالتزامات</span><span class="v">${big(T.c)}</span><span class="s">عقود جديدة وأوامر غيار</span></div>
+   <div class="kpi"><span class="l">المتاح للالتزام</span><span class="v" style="${T.a-T.c<0?"color:var(--bad)":""}">${big(T.a-T.c)}</span><span class="s">نسبة الاستخدام ${pct(T.a?T.c/T.a:null)}</span></div>
+   <div class="kpi"><span class="l">المصروف خلال السنة</span><span class="v">${big(T.s)}</span><span class="s">للخطط المدرجة أدناه</span></div>
+  </div>
+  ${R.length?`<div class="tbl-wrap cards"><table><thead><tr><th>ت</th><th>الخطة</th><th class="n">التخصيص</th><th class="n">الالتزامات</th><th class="n">المتاح</th><th class="n">الاستخدام</th><th class="n">المصروف خلال السنة</th></tr></thead><tbody>
+   ${R.map((r,i)=>{const u=r.alloc>0?r.com/r.alloc:(r.com>0?Infinity:0);return `<tr data-alloc="${esc(r.pl+"|"+r.yr)}" style="cursor:pointer"><td class="t num">${i+1}</td><td class="wide pname">${esc(r.pl)}${!r.moves.length?' <span class="pill s-bad">بلا تخصيص</span>':r.avail<0?' <span class="pill s-bad">متجاوز</span>':""}</td>
+   <td class="n" data-l="التخصيص"><span class="num">${fmt(r.alloc)}</span></td><td class="n" data-l="الالتزامات"><span class="num">${fmt(r.com)}</span></td>
+   <td class="n" data-l="المتاح"><span class="num" style="${r.avail<0?"color:var(--bad);font-weight:700":""}">${fmt(r.avail)}</span></td>
+   <td class="n" data-l="الاستخدام"><div class="mini"><span class="num">${isFinite(u)?pct(u):"—"}</span><div class="track"><i style="width:${Math.min(100,(isFinite(u)?u:1)*100)}%;${u>1?"background:var(--bad)":u>0.9?"background:var(--warn)":""}"></i></div></div></td>
+   <td class="n" data-l="المصروف خلال السنة"><span class="num">${fmt(r.spent)}</span></td></tr>`}).join("")}
+  </tbody></table></div>`:`<div class="empty">${DB===false?"قاعدة البيانات غير متاحة في هذا العرض.":`لا توجد تخصيصات مسجلة لسنة ${esc(S.ayr)}. اضغط «تخصيص أو تعزيز أو مناقلة» وأدخل تخصيص كل خطة حسب كتاب التمويل.`}</div>`}`;
+}
+function drNewAlloc(){const d=S.dr;
+  $("#drawerHost").innerHTML=shell("تخصيص أو تعزيز أو مناقلة","يُسجَّل حركةً على تخصيص الخطة، ولا يُمحى أي رقم سابق",canWrite()?`<form class="fm" id="alf">
+   <label>نوع الحركة<select class="inp" id="l_kind"><option value="base">تخصيص أصلي</option><option value="add">تعزيز (زيادة)</option><option value="cut">تخفيض</option><option value="transfer">مناقلة بين خطتين</option></select></label>
+   <label>السنة المالية<input class="inp num" id="l_yr" type="number" min="2013" max="2100" value="${esc(d.yr||S.ayr||CUR_YEAR)}"></label>
+   <label class="full"><span id="l_pl_lbl">الخطة</span><input class="inp" id="l_pl" list="dl-plans" value="${esc(d.pl||"")}" placeholder="اختر من القائمة أو اكتب اسم خطة جديدة"></label>
+   <label class="full" id="l_to_w" hidden>إلى الخطة<input class="inp" id="l_to" list="dl-plans"></label>
+   ${moneyField("l_amt","المبلغ (د.ع)","")}
+   <label>رقم كتاب التمويل<input class="inp" id="l_ref" type="text"></label>
+   <label>تاريخ الكتاب<input class="inp" id="l_rdate" type="date"></label>
+   <label class="full">ملاحظة<input class="inp" id="l_note" type="text"></label>
+   <div class="full netbox" id="l_info"></div>
+   <div class="full acts"><button class="btn gold" type="submit" id="l_save">حفظ</button><span class="fmsg" id="l_msg"></span></div></form>`:`<div class="empty">التسجيل يتطلب صلاحية الكتابة والاتصال بقاعدة البيانات.</div>`)}
+function allocInfo(){const box=$("#l_info");if(!box)return;const pl=val("l_pl"),yr=String(parseInt(val("l_yr"))||"");const r=ALLOC[pl+"|"+yr];
+  $("#l_to_w").hidden=val("l_kind")!=="transfer";$("#l_pl_lbl").textContent=val("l_kind")==="transfer"?"من الخطة":"الخطة";
+  box.innerHTML=pl&&yr?`<span>تخصيص «${esc(pl)}» لسنة ${esc(yr)}</span><span>التخصيص <b class="num">${fmt(r?.alloc)}</b></span><span>الالتزامات <b class="num">${fmt(r?.com)}</b></span><span>المتاح <b class="num">${fmt(r?.avail)}</b></span>`:`<span class="pco">اختر الخطة والسنة لعرض موقف التخصيص.</span>`}
+async function saveAlloc(ev){ev.preventDefault();const msg=$("#l_msg");msg.className="fmsg err";
+  const kind=val("l_kind"),yr=String(parseInt(val("l_yr"))||""),pl=val("l_pl"),to=val("l_to"),amt=money("l_amt");
+  if(!/^\d{4}$/.test(yr)){msg.textContent="أدخل السنة المالية.";return}
+  if(!pl){msg.textContent="اختر الخطة.";return}
+  if(!(amt>0)){msg.textContent="أدخل المبلغ.";return}
+  if(kind==="transfer"&&(!to||to===pl)){msg.textContent="اختر خطة مختلفة للمناقلة إليها.";return}
+  const r=ALLOC[pl+"|"+yr]||emptyAgg(pl,yr);
+  if(kind==="base"&&r.moves.some(m=>m.kind==="base")&&!S.dr.baseOk){msg.textContent="يوجد تخصيص أصلي لهذه الخطة والسنة. للزيادة اختر «تعزيز». اضغط حفظ مرة أخرى إن كان تخصيصاً أصلياً إضافياً.";S.dr.baseOk=true;return}
+  if((kind==="cut"||kind==="transfer")&&amt>r.avail){msg.textContent=`لا يمكن: المتاح من التخصيص ${fmt(r.avail)} د.ع فقط، والباقي ملتزم به.`;return}
+  if(!val("l_ref")&&!S.dr.refOk){msg.textContent="يُفضّل ذكر رقم كتاب التمويل. اضغط حفظ مرة أخرى للمتابعة بدونه.";S.dr.refOk=true;return}
+  const by=await me(),at=new Date().toISOString();const base={yr,ref:val("l_ref"),refDate:val("l_rdate"),note:val("l_note"),by,at};
+  $("#l_save").disabled=true;msg.className="fmsg";msg.textContent="جارٍ الحفظ…";
+  try{if(kind==="transfer"){const pair=uid();await DB.collection("allocs").add({...base,pl,kind:"tout",amt:-amt,toPl:to,pair});await DB.collection("allocs").add({...base,pl:to,kind:"tin",amt,fromPl:pl,pair})}
+    else await DB.collection("allocs").add({...base,pl,kind,amt:kind==="cut"?-amt:amt});
+    S.ayr=yr;toast("حُفظت حركة التخصيص");openDrawer({kind:"alloc",key:pl+"|"+yr})}
+  catch(err){$("#l_save").disabled=false;failMsg(msg,err)}}
+function drAlloc(){const [pl,yr]=S.dr.key.split("|");const r=ALLOC[S.dr.key]||emptyAgg(pl,yr);
+  $("#drawerHost").innerHTML=shell("تخصيص "+pl,"السنة المالية "+yr,`
+   <div class="figs">
+    <div class="fig hl"><div class="l">التخصيص النهائي</div><div class="v num">${fmt(r.alloc)}</div></div>
+    <div class="fig"><div class="l">الالتزامات</div><div class="v num">${fmt(r.com)}</div></div>
+    <div class="fig hl"><div class="l">المتاح</div><div class="v num" style="${r.avail<0?"color:var(--bad)":""}">${fmt(r.avail)}</div></div>
+    <div class="fig"><div class="l">المصروف خلال السنة</div><div class="v num">${fmt(r.spent)}</div></div>
+    <div class="fig"><div class="l">التخصيص الأصلي</div><div class="v num">${fmt(r.base)}</div></div>
+    <div class="fig"><div class="l">التعزيز</div><div class="v num">${fmt(r.add)}</div></div>
+    <div class="fig"><div class="l">التخفيض</div><div class="v num">${fmt(-r.cut)}</div></div>
+    <div class="fig"><div class="l">صافي المناقلات</div><div class="v num">${fmt(r.tr)}</div></div>
+   </div>
+   ${canWrite()?`<div class="acts"><button class="btn gold" data-open="newAlloc" data-pl="${esc(pl)}" data-yr="${esc(yr)}">＋ حركة على هذا التخصيص</button></div>`:""}
+   <div class="card"><h2>حركات التخصيص</h2>${r.moves.length?`<div class="tbl-wrap" style="max-height:none"><table><thead><tr><th>التاريخ</th><th>النوع</th><th class="n">المبلغ</th><th>الكتاب / الملاحظة</th><th>المنفذ</th></tr></thead><tbody>
+    ${r.moves.slice().sort((a,b)=>String(b.at).localeCompare(String(a.at))).map(m=>`<tr><td class="num">${esc(m.refDate||String(m.at).slice(0,10))}</td><td>${esc(ALK[m.kind]||m.kind)}${m.toPl?` «${esc(m.toPl)}»`:""}${m.fromPl?` «${esc(m.fromPl)}»`:""}</td><td class="n num">${fmt(m.amt)}</td><td>${esc([m.ref?"كتاب "+m.ref:"",m.note].filter(Boolean).join(" · ")||"—")}</td><td>${esc(whoName(m.by))}</td></tr>`).join("")}</tbody></table></div>`:`<p class="note">لا توجد حركات تخصيص. أي التزام على هذه الخطة سيُرفض ما دامت الرقابة مفعّلة.</p>`}</div>
+   <div class="card"><h2>الالتزامات على التخصيص</h2>${r.items.length?`<div class="tbl-wrap" style="max-height:none"><table><thead><tr><th>التاريخ</th><th>المشروع</th><th>النوع</th><th class="n">المبلغ</th></tr></thead><tbody>
+    ${r.items.map(x=>`<tr data-goproj="${esc(x.pid)}" style="cursor:pointer"><td class="num">${esc(x.date||"")}</td><td class="pname">${esc(EM[x.pid]?.nm||x.pid)}</td><td>${esc(x.kind)}</td><td class="n num">${fmt(x.amt)}</td></tr>`).join("")}</tbody></table></div>`:`<p class="note">لا توجد التزامات مسجلة على هذا التخصيص.</p>`}</div>`)}
+
+/* خطابات الضمان */
+function daysPill(g){if(g.st!=="active")return "";const d=daysTo(g.exp);return d<0?`<span class="pill s-bad">منتهٍ منذ ${-d} يوم</span>`:d<=30?`<span class="pill s-warn">باقٍ ${d} يوم</span>`:`<span class="pill s-idle">باقٍ ${d} يوم</span>`}
+function gRows(list,ctx){return list.map((g,i)=>{const e=EM[g.pid]||{};const ext=(g.hist||[]).filter(h=>h.act==="extend").length;
+  return `<tr ${ctx==="tab"?`data-id="${esc(g.pid)}"`:""}><td class="t num">${i+1}</td>
+  ${ctx==="tab"?`<td class="wide"><div class="pname">${esc(e.nm||g.pid)}</div><div class="pco">${esc(e.co||"")}</div></td>`:""}
+  <td data-l="الضمان"><b>${esc(g.kind)}</b><div class="pco">رقم ${esc(g.no)}</div></td>
+  <td data-l="المصرف">${esc(g.bank||"—")}</td>
+  <td class="n" data-l="المبلغ"><span class="num">${fmt(g.amt)}</span></td>
+  <td data-l="تاريخ النفاذ"><span class="num">${esc(g.exp)}</span> ${daysPill(g)}${ext?`<div class="pco">مُدِّد ${ext} مرة</div>`:""}</td>
+  <td data-l="الحالة"><span class="pill ${GST[g.st]?.c||"s-idle"}">${GST[g.st]?.t||g.st}</span></td>
+  <td class="wide" data-l="الإجراء" data-noopen="1">${gActCell(g)}</td></tr>`}).join("")}
+function gActCell(g){if(g.st!=="active")return `<span class="pco">${g.st==="seized"&&g.seizeWhy?esc(g.seizeWhy):"—"}</span>`;if(!canWrite())return "—";
+  if(S.gact&&S.gact.id===g._id){const k=S.gact.kind;const e=EM[g.pid]||{};
+    return `<div class="iact" data-noopen="1">
+     ${k==="extend"?`<label class="pco">تاريخ النفاذ الجديد<input class="inp" id="ig_exp" type="date" value="${esc(addDays(g.exp,90))}"></label>`:""}
+     <input class="inp" id="ig_ref" placeholder="${k==="extend"?"رقم كتاب التمديد من المصرف":k==="seize"?"رقم كتاب المصادرة":"رقم كتاب الإعادة"}">
+     <input class="inp" id="ig_note" placeholder="${k==="seize"?"سبب المصادرة (مطلوب)":"ملاحظة (اختياري)"}">
+     ${k==="release"&&g.kind==="ضمان حسن التنفيذ"&&!String(e.st||"").startsWith("منجز")?`<span class="warnx">المشروع غير منجز. إعادة ضمان حسن التنفيذ قبل الاستلام النهائي تُفقد المحافظة الغطاء.</span>`:""}
+     <div class="acts"><button class="btn sm ${k==="seize"?"danger":""}" data-dogact="${g._id}">تأكيد ${k==="extend"?"التمديد":k==="seize"?"المصادرة":"الإعادة"}</button><button class="btn ghost sm" data-cancelgact="1">إلغاء</button></div></div>`}
+  return `<div class="acts" data-noopen="1"><button class="btn sm" data-gact="${g._id}" data-kind="extend">تمديد</button><button class="btn ghost sm" data-gact="${g._id}" data-kind="release">إعادة للشركة</button><button class="btn danger sm" data-gact="${g._id}" data-kind="seize">مصادرة</button></div>`}
+async function doGAct(id,btn){const g=GU.find(x=>x._id===id);if(!g||!S.gact)return;const k=S.gact.kind;const box=btn.closest(".iact");const iv=n=>(box.querySelector("#"+n)?.value||"").trim();
+  const by=await me(),at=new Date().toISOString();const h={act:k,by,at,ref:iv("ig_ref"),note:iv("ig_note")};const upd={};
+  if(k==="extend"){const ne=iv("ig_exp");if(!ne||ne<=g.exp){toast("تاريخ النفاذ الجديد يجب أن يكون بعد الحالي");return}h.from=g.exp;h.to=ne;upd.exp=ne}
+  if(k==="seize"){if(!h.note){toast("اكتب سبب المصادرة");box.querySelector("#ig_note")?.focus();return}upd.st="seized";upd.seizeWhy=h.note}
+  if(k==="release")upd.st="released";
+  upd.hist=[...(g.hist||[]),h];btn.disabled=true;
+  try{await DB.collection("guarantees").doc(id).update(upd);S.gact=null;toast(k==="extend"?"مُدِّد الخطاب حتى "+h.to:k==="seize"?"سُجِّلت مصادرة الضمان":"سُجِّلت إعادة الضمان للشركة")}
+  catch(err){btn.disabled=false;toast("تعذّر الحفظ")}}
+function vGuar(){const G=GU.filter(g=>EM[g.pid]&&inSrc(EM[g.pid]));
+  const pick=k=>G.filter(g=>k==="all"?true:k==="active"?g.st==="active":gBucket(g)===k);const sum=l=>l.reduce((s,g)=>s+(+g.amt||0),0);
+  const q=norm(S.gq);const L=pick(S.gst).filter(g=>!q||EM[g.pid].k.includes(q)||norm(g.no).includes(q)).sort((x,y)=>String(x.exp).localeCompare(String(y.exp)));
+  const B=[["active","نافذة","s-done"],["soon","تنتهي خلال 30 يوماً","s-warn"],["expired","منتهية ولم تُمدد","s-bad"],["released","مُعادة للشركات","s-idle"],["seized","مُصادَرة","s-bad"],["all","الكل","s-info"]];
+  $("#v-guar").innerHTML=`
+  <div class="vhead"><h2>خطابات الضمان</h2><div class="acts">${canWrite()?'<button class="btn gold" data-open="newG">＋ إضافة خطاب ضمان</button>':""}${DL?'<button class="btn ghost" data-xl="guar">تقرير الضمانات (Excel)</button>':""}</div></div>
+  <p class="note">ينبّه النظام قبل انتهاء نفاذ الخطاب بثلاثين يوماً، ويُظهر الخطابات المنتهية، ويطلب مصادرة ضمان العقود المفسوخة. كل تمديد أو إعادة أو مصادرة يُسجَّل باسم منفذه ورقم كتابه.</p>
+  ${srcBar()}
+  <div class="kpis k7">${B.map(([k,l,c])=>`<button class="kpi" data-gst="${k}" aria-pressed="${S.gst===k}"><span class="l"><span class="pill ${c}">${l}</span></span><span class="v num">${fmt(pick(k).length)}</span><span class="s">${big(sum(pick(k)))} د.ع</span></button>`).join("")}</div>
+  <div class="filters"><input class="inp" type="search" id="gq" placeholder="ابحث باسم المشروع أو الشركة أو رقم الخطاب…" value="${esc(S.gq)}"></div>
+  ${DB===false?`<div class="empty">قاعدة البيانات المشتركة غير متاحة في هذا العرض.</div>`
+   :L.length?`<div class="tbl-wrap cards"><table><thead><tr><th>ت</th><th>المشروع</th><th>الضمان</th><th>المصرف</th><th class="n">المبلغ</th><th>تاريخ النفاذ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>${gRows(L,"tab")}</tbody></table></div>`
+   :`<div class="empty">${G.length?"لا توجد خطابات في هذه الفئة.":"لم تُسجَّل خطابات ضمان بعد. اضغط «إضافة خطاب ضمان» واختر المشروع، ثم أدخل رقم الخطاب والمصرف والمبلغ وتاريخ النفاذ."}</div>`}`;
+}
+function gSec(e){return `<div class="card"><h2>خطابات الضمان <small>${e.gs.filter(g=>g.st==="active").length} نافذ</small></h2>
+  ${e.gs.length?`<div class="tbl-wrap cards" style="max-height:none"><table><thead><tr><th>ت</th><th>الضمان</th><th>المصرف</th><th class="n">المبلغ</th><th>تاريخ النفاذ</th><th>الحالة</th><th>الإجراء</th></tr></thead><tbody>${gRows(e.gs,"dr")}</tbody></table></div>`:`<p class="note">لا توجد خطابات ضمان مسجلة لهذا المشروع.</p>`}
+  ${!canWrite()?"":S.gForm?`<form class="fm" id="gf" style="margin-top:12px">
+   <div class="full" style="font-family:var(--f-head);font-weight:700">خطاب ضمان جديد</div>
+   <label>نوع الضمان<select class="inp" id="g_kind">${GKINDS.map(k=>`<option>${k}</option>`).join("")}</select></label>
+   <label>رقم الخطاب<input class="inp" id="g_no" type="text"></label>
+   <label>المصرف المُصدِر<input class="inp" id="g_bank" list="dl-banks"></label>
+   ${moneyField("g_amt","مبلغ الضمان (د.ع)","")}
+   <label>تاريخ الإصدار<input class="inp" id="g_iss" type="date" value="${today()}"></label>
+   <label>تاريخ النفاذ (الانتهاء)<input class="inp" id="g_exp" type="date"></label>
+   <label class="full">ملاحظة<input class="inp" id="g_note" type="text"></label>
+   ${e.c?`<div class="full"><button class="btn ghost sm" type="button" data-g5="1">املأ 5% من مبلغ العقد = ${fmt(Math.round(e.c*0.05))}</button></div>`:""}
+   <div class="full acts"><button class="btn gold" type="submit" id="g_save">حفظ الخطاب</button><button class="btn ghost" type="button" data-gform="0">إلغاء</button><span class="fmsg" id="g_msg"></span></div>
+  </form>`:`<div class="acts" style="margin-top:12px"><button class="btn gold" data-gform="1">＋ إضافة خطاب ضمان</button></div>`}
+ </div>`}
+async function saveG(ev){ev.preventDefault();const e=EM[S.dr.id];const msg=$("#g_msg");msg.className="fmsg err";
+  const amt=money("g_amt"),no=val("g_no"),exp=val("g_exp"),iss=val("g_iss");
+  if(!no){msg.textContent="أدخل رقم خطاب الضمان.";$("#g_no").focus();return}
+  if(!(amt>0)){msg.textContent="أدخل مبلغ الضمان.";return}
+  if(!exp){msg.textContent="أدخل تاريخ نفاذ الخطاب.";return}
+  if(iss&&exp<=iss){msg.textContent="تاريخ النفاذ يجب أن يكون بعد تاريخ الإصدار.";return}
+  if(GU.some(g=>norm(g.no)===norm(no)&&norm(g.bank)===norm(val("g_bank")))){msg.textContent="خطاب بالرقم والمصرف نفسيهما مسجل مسبقاً.";return}
+  const by=await me(),at=new Date().toISOString();
+  const doc={pid:e.id,kind:val("g_kind"),no,bank:val("g_bank"),amt,iss,exp,exp0:exp,st:"active",note:val("g_note"),by,at,hist:[{act:"add",by,at}]};
+  $("#g_save").disabled=true;msg.className="fmsg";msg.textContent="جارٍ الحفظ…";
+  try{await DB.collection("guarantees").add(doc);S.gForm=false;S.dirty=false;toast("سُجِّل خطاب الضمان رقم "+no)}
+  catch(err){$("#g_save").disabled=false;failMsg(msg,err)}}
+
 /* التقارير */
 function vReports(){
   const xs=XSHEETS.map(s=>`«${s}»`).join(" و");
@@ -484,6 +684,10 @@ function vReports(){
       <button class="btn" data-xl="all" ${DL?"":"disabled"}>تنزيل Excel</button></div>
     <div class="card"><h3>تقرير الإنذار المبكر</h3><p>ورقة لكل قاعدة تنبيه بالمشاريع المعنية ومبالغها، لرفعه إلى الإدارة أو لجنة المتابعة.</p>
       <button class="btn" data-xl="alerts" ${DL?"":"disabled"}>تنزيل Excel</button></div>
+    <div class="card"><h3>تقرير التخصيصات</h3><p>ورقة لكل سنة مالية: التخصيص الأصلي والتعزيز والتخفيض والمناقلات والالتزامات والمتاح والمصروف، مع ورقتي حركات التخصيص والالتزامات.</p>
+      <button class="btn" data-xl="alloc" ${DL?"":"disabled"}>تنزيل Excel</button></div>
+    <div class="card"><h3>تقرير خطابات الضمان</h3><p>كل خطاب: المشروع والشركة والمصرف والمبلغ وتاريخ النفاذ والأيام المتبقية وعدد التمديدات والحالة، مرتبة حسب أقرب انتهاء.</p>
+      <button class="btn" data-xl="guar" ${DL?"":"disabled"}>تنزيل Excel</button></div>
     <div class="card"><h3>سجل التدقيق</h3><p>كل عملية في النظام: من أدخلها، ومتى، والقيمة قبل التعديل وبعده.</p>
       <button class="btn" data-xl="audit" ${DL?"":"disabled"}>تنزيل Excel</button></div>
   </div>`;
@@ -524,6 +728,9 @@ function auditEntries(){
     out.push({at:t.at,pid:t.pid,kind:TYPES[t.type]||t.type,cls:t.type==="pay"?"s-done":t.type==="change"?"s-warn":t.type==="edit"?"s-gold":"s-idle",amt:+t.amt||0,d,by:t.by})}
   for(const a of ADV)for(const h of (a.hist||[]))out.push({at:h.at,pid:a.pid,kind:`سلفة ${advLabel(a)}: ${STAGES[h.s]?.t||h.s}`,cls:STAGES[h.s]?.c||"s-idle",amt:+a.gross||0,d:[h.ref?`صك ${h.ref}`:"",h.note,h.self?"استثناء من فصل المهام":""].filter(Boolean).join(" · "),by:h.by});
   for(const p of NP)out.push({at:p.at,pid:p._id,kind:"إضافة مشروع جديد",cls:"s-info",amt:+p.c0||0,d:[p.src,p.cno?`عقد ${p.cno}`:""].filter(Boolean).join(" · "),by:p.by});
+  for(const a of AL)out.push({at:a.at,pid:"",label:`${a.pl} / ${a.yr}`,kind:"تخصيص: "+(ALK[a.kind]||a.kind),cls:"s-gold",amt:+a.amt||0,d:[a.ref?"كتاب "+a.ref:"",a.toPl?"إلى "+a.toPl:"",a.fromPl?"من "+a.fromPl:"",a.note].filter(Boolean).join(" · "),by:a.by});
+  for(const g of GU)for(const h of (g.hist||[]))out.push({at:h.at,pid:g.pid,kind:GACT[h.act]||h.act,cls:h.act==="seize"?"s-bad":h.act==="extend"?"s-warn":"s-info",amt:+g.amt||0,d:[g.kind,"رقم "+g.no,g.bank,h.from?`${h.from} ← ${h.to}`:"",h.ref?"كتاب "+h.ref:"",h.note].filter(Boolean).join(" · "),by:h.by});
+  for(const h of (SET.hist||[]))out.push({at:h.at,pid:"",label:"إعدادات النظام",kind:h.enforce?"تفعيل الرقابة على التخصيصات":"تعطيل الرقابة على التخصيصات",cls:h.enforce?"s-done":"s-bad",amt:0,d:"",by:h.by});
   return out.sort((x,y)=>String(y.at).localeCompare(String(x.at)));
 }
 function vJournal(){
@@ -531,23 +738,24 @@ function vJournal(){
   if(DB===false)body=`<div class="empty">قاعدة البيانات المشتركة غير متاحة في هذا العرض. افتح الصفحة من حساب claude.ai مسجَّل.</div>`;
   else if(!L.length)body=`<div class="empty">لم تُسجَّل أي عملية بعد. كل سلفة أو صرف أو تعديل أو مشروع جديد يظهر هنا باسم منفذه ووقته.</div>`;
   else body=`<div class="tbl-wrap cards"><table><thead><tr><th>ت</th><th>الوقت</th><th>المشروع</th><th>العملية</th><th class="n">المبلغ</th><th>التفاصيل</th><th>المنفذ</th></tr></thead><tbody>
-  ${L.slice(0,500).map((t,i)=>`<tr data-id="${esc(t.pid)}"><td class="t num">${i+1}</td><td data-l="الوقت"><span class="num">${esc(String(t.at||"").replace("T"," ").slice(0,16))}</span></td><td class="wide pname">${esc(EM[t.pid]?.nm||t.pid)}</td>
+  ${L.slice(0,500).map((t,i)=>`<tr data-id="${esc(t.pid)}"><td class="t num">${i+1}</td><td data-l="الوقت"><span class="num">${esc(String(t.at||"").replace("T"," ").slice(0,16))}</span></td><td class="wide pname">${esc(EM[t.pid]?.nm||t.label||t.pid)}</td>
   <td data-l="العملية"><span class="pill ${t.cls}">${esc(t.kind)}</span></td><td class="n" data-l="المبلغ"><span class="num">${t.amt?fmt(t.amt):"—"}</span></td>
   <td class="wide chg" data-l="التفاصيل">${esc(t.d||"—")}</td><td data-l="المنفذ">${esc(whoName(t.by))}</td></tr>`).join("")}</tbody></table></div>`;
   $("#v-journal").innerHTML=`<div class="vhead"><h2>سجل التدقيق</h2>${DL?'<button class="btn ghost" data-xl="audit">تنزيل Excel</button>':""}</div><p class="note">كل عملية تُحفظ بتاريخها ومنفذها ولا تُحذف. التصحيح يكون بعملية جديدة (حركة عكسية أو تعديل مع ذكر السبب)، وهذا مبدأ سجل التدقيق في الأنظمة المالية الحكومية.</p>${body}`;
 }
 
 /* الدرج */
-function openDrawer(d){S.dr=d;S.act=null;S.dirty=false;S.advForm=d.kind==="project"&&d.advForm;renderDrawer(true)}
+function openDrawer(d){S.dr=d;S.act=null;S.dirty=false;S.advForm=d.kind==="project"&&d.advForm;S.gForm=d.kind==="project"&&d.gForm;S.gact=null;renderDrawer(true)}
 function closeDrawer(){S.dr=null;S.dirty=false;$("#drawerHost").innerHTML=""}
 function shell(title,sub,body){return `<div class="scrim" id="scrim"></div><aside class="drawer" role="dialog" aria-modal="true" aria-label="${esc(title)}">
   <div class="dhead"><h2>${esc(title)}${sub?`<p>${sub}</p>`:""}</h2><button class="x" id="xb" aria-label="إغلاق">✕</button></div><div class="dbody">${body}</div></aside>
   <datalist id="dl-plans">${[...new Set(E.map(e=>e.pl))].sort().map(p=>`<option value="${esc(p)}">`).join("")}</datalist>
+  <datalist id="dl-banks">${[...new Set([...BANKS,...GU.map(g=>g.bank).filter(Boolean)])].map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
   <datalist id="dl-st">${[...new Set([...STATUS_BASE,...E.map(e=>e.st)])].map(p=>`<option value="${esc(p)}">`).join("")}</datalist>`}
 function renderDrawer(first){
   if(!S.dr){$("#drawerHost").innerHTML="";return}
   const sc=$("aside.drawer")?.scrollTop||0;
-  if(S.dr.kind==="project")drProject();else if(S.dr.kind==="newProject")drNewProject();else if(S.dr.kind==="newAdv")drPickProject();
+  if(S.dr.kind==="project")drProject();else if(S.dr.kind==="newProject")drNewProject();else if(S.dr.kind==="newAdv"||S.dr.kind==="newG")drPickProject();else if(S.dr.kind==="newAlloc")drNewAlloc();else if(S.dr.kind==="alloc")drAlloc();
   $("#xb").onclick=closeDrawer;$("#scrim").onclick=closeDrawer;
   const dw=$("aside.drawer");if(first)$("#xb").focus();else dw.scrollTop=sc;
   dw.addEventListener("input",()=>{S.dirty=true});
@@ -593,6 +801,8 @@ function drProject(){
       <div class="full acts"><button class="btn gold" type="submit" id="a_save">رفع السلفة</button><button class="btn ghost" type="button" data-advform="0">إلغاء</button><span class="fmsg" id="a_msg"></span></div>
      </form>`:`<div class="acts" style="margin-top:12px"><button class="btn gold" data-advform="1">＋ إضافة سلفة جديدة</button></div>`}
     </div>
+
+    ${gSec(e)}
 
     <div class="card"><h2>حركات مالية أخرى</h2>
      ${canWrite()?`<form class="fm" id="txf">
@@ -647,7 +857,7 @@ function drNewProject(){
 
 function drPickProject(){
   const q=norm(S.dr.q||"");const L=q?E.filter(e=>e.k.includes(q)).slice(0,12):[];
-  $("#drawerHost").innerHTML=shell("إضافة سلفة جديدة","اختر المشروع أولاً",`
+  $("#drawerHost").innerHTML=shell(S.dr.kind==="newG"?"إضافة خطاب ضمان":"إضافة سلفة جديدة","اختر المشروع أولاً",`
    <div class="card"><label class="note" for="pk">ابحث عن المشروع باسمه أو اسم الشركة أو رقم العقد</label>
     <input class="inp" id="pk" type="search" value="${esc(S.dr.q||"")}" placeholder="مثال: ماء البغدادي" style="margin-top:6px">
     <div class="pick">${L.map(e=>`<button data-pickp="${e.id}"><div class="pname">${esc(e.nm)}</div><div class="pco">${esc(e.co)} · ${esc(e.src)} · العقد ${fmt(e.c)} · المصروف ${fmt(e.sp)}</div></button>`).join("")||(q?'<p class="note">لا نتائج.</p>':'<p class="note">اكتب حرفين على الأقل.</p>')}</div>
@@ -663,6 +873,8 @@ function bindForms(){
   const ef=$("#edf");if(ef)ef.onsubmit=saveEdit;
   const eb=$("#editbox");if(eb)eb.ontoggle=()=>{if(S.dr)S.dr.edit=eb.open};
   const nf=$("#npf");if(nf)nf.onsubmit=saveProject;
+  const gf=$("#gf");if(gf)gf.onsubmit=saveG;
+  const lf=$("#alf");if(lf){lf.onsubmit=saveAlloc;["l_kind","l_pl","l_yr"].forEach(i=>{$("#"+i).addEventListener("input",allocInfo);$("#"+i).addEventListener("change",allocInfo)});allocInfo()}
 }
 function netUp(){const g=toNum($("#a_gross")?.value)||0;const d=["a_ret","a_tax","a_fine","a_oth"].reduce((s,i)=>s+(toNum($("#"+i)?.value)||0),0);const n=$("#a_net");if(n)n.textContent=fmt(g-d)}
 const val=id=>($("#"+id)?.value||"").trim();
@@ -691,7 +903,8 @@ async function saveTx(ev){ev.preventDefault();const e=EM[S.dr.id];const msg=$("#
   if(type==="status"&&!val("t_st")){msg.textContent="اكتب الحالة الجديدة أو اخترها.";return}
   if(type==="note"&&!val("t_note")){msg.textContent="اكتب نص الملاحظة.";return}
   if(type==="pay"&&e.c&&e.sp+amt>e.c+1){msg.textContent=`مرفوض: الصرف يتجاوز مبلغ العقد (المتبقي ${fmt(e.c-e.sp)} د.ع).`;return}
-  const doc={pid:e.id,type,amt:(type==="status"||type==="note")?0:amt,date:val("t_date")||today(),ref:val("t_ref"),note:val("t_note"),at:new Date().toISOString(),by:await me()};
+  let ck=null;if(type==="change"&&amt>0){ck=allocCheck(e.pl,yearOf(val("t_date"))||CUR_YEAR,amt);if(ck&&ck.block){msg.textContent=ck.msg;return}}
+  const doc={overAlloc:!!ck,pid:e.id,type,amt:(type==="status"||type==="note")?0:amt,date:val("t_date")||today(),ref:val("t_ref"),note:val("t_note"),at:new Date().toISOString(),by:await me()};
   if(type==="status")doc.newSt=val("t_st");
   $("#t_save").disabled=true;msg.className="fmsg";msg.textContent="جارٍ الحفظ…";
   try{await DB.collection("txns").add(doc);S.dirty=false;toast("حُفظت الحركة في سجل المشروع")}
@@ -707,7 +920,8 @@ async function saveEdit(ev){ev.preventDefault();const e=EM[S.dr.id];const msg=$(
   if(!Object.keys(changes).length){msg.textContent="لم تغيّر أي حقل.";return}
   if(changes.nm&&!changes.nm.to){msg.textContent="اسم المشروع لا يكون فارغاً.";return}
   if(!val("ed_why")){msg.textContent="اكتب سبب التعديل، فهو جزء من سجل التدقيق.";$("#ed_why").focus();return}
-  const doc={pid:e.id,type:"edit",changes,amt:0,date:today(),note:val("ed_why"),at:new Date().toISOString(),by:await me()};
+  let ck=null;if(changes.c&&changes.c.to>changes.c.from){ck=allocCheck(changes.pl?changes.pl.to||e.pl:e.pl,CUR_YEAR,changes.c.to-changes.c.from);if(ck&&ck.block){msg.textContent=ck.msg;return}}
+  const doc={overAlloc:!!ck,pid:e.id,type:"edit",changes,amt:0,date:today(),note:val("ed_why"),at:new Date().toISOString(),by:await me()};
   $("#ed_save").disabled=true;msg.className="fmsg";msg.textContent="جارٍ الحفظ…";
   try{await DB.collection("txns").add(doc);S.dirty=false;toast(`حُفظ تعديل ${Object.keys(changes).length} حقل`)}
   catch(err){$("#ed_save").disabled=false;failMsg(msg,err)}}
@@ -720,8 +934,11 @@ async function saveProject(ev){ev.preventDefault();const msg=$("#n_msg");msg.cla
   if(isNaN(ap)){msg.textContent="الكلفة المصادقة غير صالحة.";return}
   const dup=E.find(x=>norm(x.nm)===norm(val("n_nm"))&&x.ck===coKey(val("n_co")));
   if(dup&&!S.dr.dupOk){msg.textContent="يوجد مشروع بالاسم والشركة نفسيهما. اضغط «إضافة المشروع» مرة أخرى للتأكيد.";S.dr.dupOk=true;return}
+  const npl=val("n_pl")||"غير محددة",nyr=yearOf(val("n_cdt"))||CUR_YEAR;const ck=allocCheck(npl,nyr,c0);
+  if(ck&&ck.block){msg.textContent=ck.msg;return}
+  if(ck&&!S.dr.allocOk){msg.textContent=ck.msg+" اضغط «إضافة المشروع» مرة أخرى للتأكيد.";S.dr.allocOk=true;return}
   const id=uid();
-  const doc={src:val("n_src")||SRC_MAIN,nm:val("n_nm"),co:val("n_co"),pl:val("n_pl")||"غير محددة",st:val("n_st")||"قيد التنفيذ",cno:val("n_cno"),cdt:val("n_cdt"),sdt:val("n_sdt"),dur:Math.round(+val("n_dur")||0),c0,c:c0,ap:ap||0,at:new Date().toISOString(),by:await me()};
+  const doc={overAlloc:!!ck,src:val("n_src")||SRC_MAIN,nm:val("n_nm"),co:val("n_co"),pl:val("n_pl")||"غير محددة",st:val("n_st")||"قيد التنفيذ",cno:val("n_cno"),cdt:val("n_cdt"),sdt:val("n_sdt"),dur:Math.round(+val("n_dur")||0),c0,c:c0,ap:ap||0,at:new Date().toISOString(),by:await me()};
   $("#n_save").disabled=true;msg.className="fmsg";msg.textContent="جارٍ الحفظ…";
   try{await DB.collection("projects").doc(id).set(doc);toast("أضيف المشروع");S.pendingOpen=id}
   catch(err){$("#n_save").disabled=false;failMsg(msg,err)}}
@@ -745,7 +962,7 @@ function toast(m){const t=document.createElement("div");t.className="toast";t.te
 function loadXLSX(){if(window.XLSX)return Promise.resolve(window.XLSX);if(XLSXP)return XLSXP;
   XLSXP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=()=>ok(window.XLSX);s.onerror=()=>{XLSXP=null;no(new Error("load"))};document.head.appendChild(s)});return XLSXP}
 const rawMap=e=>Object.fromEntries(e.raw||[]);
-const isMoneyH=h=>!!h&&/مبلغ|الكلفة|المصروف|السلف|المتبقي|المستلم|جزء من/.test(h)&&!/رقم/.test(h);
+const isMoneyH=h=>!!h&&/مبلغ|الكلفة|المصروف|السلف|المتبقي|المستلم|جزء من|التخصيص|التعزيز|التخفيض|المناقلات|الالتزامات|المتاح/.test(h)&&!/رقم|الأيام|عدد/.test(h);
 const isPctH=h=>!!h&&/نسبة/.test(h);
 function lastAdvNo(e){const a=e.advs.filter(x=>x.stage!=="rejected");if(!a.length){const r=rawMap(e)["رقم السلفة"];return r??""}const l=a[a.length-1];return l.final?"النهائية":l.no}
 function mainRow(e,i){const r=rawMap(e);return [i,e.st==="غير محددة"?"":e.st,e.pl,e.nm,e.co,e.c0||"",e.c||"",e.ap||"",e.c?e.sp/e.c:"",e.sp,lastAdvNo(e),e.pend||"",e.bank||"",e.sp+(e.bank||0),r["نسبة الإنجاز الفعلي"]??""]}
@@ -797,15 +1014,28 @@ async function exportXL(kind){
     for(const r of RULES){const L=E.filter(e=>e.al.includes(r.id));if(!L.length)continue;const rows=L.map((e,i)=>[i+1,e.src,e.nm,e.co,e.st,e.c,e.ap||"",e.sp,e.pend,e.c?e.sp/e.c:""]);
       XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[hdr,...rows]),r.t.slice(0,31).replace(/[\\\/?*\[\]:]/g,""))}
     fn=`تقرير الإنذار المبكر ${d}.xlsx`}
+  else if(kind==="alloc"){const yrs=[...new Set(Object.values(ALLOC).map(r=>r.yr))].sort().reverse();
+    const hdr=["ت","الخطة","التخصيص الأصلي","التعزيز","التخفيض","صافي المناقلات","التخصيص النهائي","الالتزامات","المتاح","نسبة الاستخدام","المصروف خلال السنة"];
+    for(const y of yrs){const R=Object.values(ALLOC).filter(r=>r.yr===y).sort((a,b)=>b.alloc-a.alloc);const rows=R.map((r,i)=>[i+1,r.pl,r.base,r.add,-r.cut,r.tr,r.alloc,r.com,r.avail,r.alloc?r.com/r.alloc:"",r.spent]);
+      XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[hdr,...rows,totalRow(hdr,rows)],{total:1}),"التخصيصات "+y)}
+    const mh=["ت","السنة المالية","الخطة","نوع الحركة","المبلغ","رقم الكتاب","تاريخ الكتاب","ملاحظة","المنفذ","وقت التسجيل"];
+    XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[mh,...AL.slice().sort((a,b)=>String(a.at).localeCompare(String(b.at))).map((a,i)=>[i+1,a.yr,a.pl,(ALK[a.kind]||a.kind)+(a.toPl?" "+a.toPl:"")+(a.fromPl?" "+a.fromPl:""),+a.amt||0,a.ref||"",a.refDate||"",a.note||"",whoName(a.by),String(a.at||"").replace("T"," ").slice(0,19)])]),"حركات التخصيص");
+    const ch=["ت","السنة المالية","الخطة","اسم المشروع","نوع الالتزام","المبلغ","التاريخ"];const CI=Object.values(ALLOC).flatMap(r=>r.items.map(x=>({...x,yr:r.yr,pl:r.pl})));
+    XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[ch,...CI.map((x,i)=>[i+1,x.yr,x.pl,EM[x.pid]?.nm||x.pid,x.kind,x.amt,x.date||""])]),"الالتزامات");
+    fn=`تقرير التخصيصات ${d}.xlsx`}
+  else if(kind==="guar"){const hdr=["ت","المصدر","اسم المشروع","اسم الشركة","رقم العقد","نوع الضمان","رقم الخطاب","المصرف","مبلغ الضمان","تاريخ الإصدار","تاريخ النفاذ","الأيام المتبقية","الحالة","عدد التمديدات","ملاحظات"];
+    const L=GU.filter(g=>EM[g.pid]).sort((a,b)=>String(a.exp).localeCompare(String(b.exp)));
+    const rows=L.map((g,i)=>{const e=EM[g.pid];return [i+1,e.src,e.nm,e.co,e.cno??"",g.kind,g.no,g.bank||"",+g.amt||0,g.iss||"",g.exp,g.st==="active"?daysTo(g.exp):"",GST[g.st]?.t||g.st,(g.hist||[]).filter(h=>h.act==="extend").length,[g.note,g.seizeWhy].filter(Boolean).join(" · ")]});
+    XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[hdr,...rows,...(rows.length?[totalRow(hdr,rows)]:[])],{total:rows.length?1:0}),"خطابات الضمان");fn=`تقرير خطابات الضمان ${d}.xlsx`}
   else if(kind==="audit"){const hdr=["ت","الوقت","اسم المشروع","العملية","المبلغ","التفاصيل","المنفذ"];const L=auditEntries();
-    XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[hdr,...L.map((t,i)=>[i+1,String(t.at||"").replace("T"," ").slice(0,19),EM[t.pid]?.nm||t.pid,t.kind,t.amt||"",t.d||"",whoName(t.by)])]),"سجل التدقيق");fn=`سجل التدقيق ${d}.xlsx`}
+    XLSX.utils.book_append_sheet(wb,sheetFrom(XLSX,[hdr,...L.map((t,i)=>[i+1,String(t.at||"").replace("T"," ").slice(0,19),EM[t.pid]?.nm||t.label||t.pid,t.kind,t.amt||"",t.d||"",whoName(t.by)])]),"سجل التدقيق");fn=`سجل التدقيق ${d}.xlsx`}
   if(!wb.SheetNames.length)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["لا توجد بيانات"]]),"فارغ");
   const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
   try{await DL.save({filename:fn,data:new Uint8Array(out)});toast("جُهّز الملف: \u2068"+fn+"\u2069")}
   catch(err){if(err&&err.code!=="declined")toast("تعذّر حفظ الملف")}}
 
 /* التنقل */
-const VIEWS={dash:vDash,projects:vProjects,advances:vAdvances,reports:vReports,alerts:vAlerts,companies:vCompanies,journal:vJournal};
+const VIEWS={dash:vDash,projects:vProjects,advances:vAdvances,allocs:vAllocs,guar:vGuar,reports:vReports,alerts:vAlerts,companies:vCompanies,journal:vJournal};
 function cur(){const h=location.hash.slice(1);return VIEWS[h]?h:"dash"}
 function render(){const v=cur();const ae=document.activeElement;const keep=ae&&ae.id&&!ae.closest("aside")?{id:ae.id,s:ae.selectionStart}:null;
   for(const k in VIEWS)$("#v-"+k).hidden=k!==v;
@@ -813,6 +1043,8 @@ function render(){const v=cur();const ae=document.activeElement;const keep=ae&&a
   VIEWS[v]();
   const n=E.filter(e=>e.al.some(a=>a==="over"||a==="fasakh"||a==="commit")).length;$("#alcnt").textContent=n||"";
   const o=ADV.filter(a=>a.stage==="raised"||a.stage==="audited"||a.stage==="ready").length;$("#advcnt").textContent=o||"";
+  $("#gcnt").textContent=GU.filter(g=>g.st==="active"&&daysTo(g.exp)<=30).length||"";
+  $("#alloccnt").textContent=Object.values(ALLOC).filter(r=>r.yr===CUR_YEAR&&r.avail<0).length||"";
   if(keep){const el=document.getElementById(keep.id);if(el&&el.focus){el.focus();try{if(keep.s!=null)el.setSelectionRange(keep.s,keep.s)}catch(_){}}}}
 function refreshAll(){recompute();render();
   if(S.pendingOpen&&EM[S.pendingOpen]){const id=S.pendingOpen;S.pendingOpen=null;openDrawer({kind:"project",id});return}
@@ -821,15 +1053,25 @@ function go(v){if(location.hash==="#"+v)render();else location.hash=v;window.scr
 addEventListener("hashchange",render);
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],[data-open],[data-xl],[data-astage],[data-act],[data-doact],[data-cancelact],[data-advform],[data-pickp],#moreb");
+  const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],[data-open],[data-xl],[data-astage],[data-act],[data-doact],[data-cancelact],[data-advform],[data-pickp],[data-gact],[data-cancelgact],[data-dogact],[data-gform],[data-g5],[data-ayr],[data-alloc],[data-goproj],[data-gst],[data-enf],#moreb");
   if(!t)return;
   if(t.dataset.xl){exportXL(t.dataset.xl);return}
-  if(t.dataset.open){openDrawer({kind:t.dataset.open});return}
-  if(t.dataset.pickp){openDrawer({kind:"project",id:t.dataset.pickp,advForm:true});return}
+  if(t.dataset.open){openDrawer({kind:t.dataset.open,pl:t.dataset.pl,yr:t.dataset.yr});return}
+  if(t.dataset.pickp){openDrawer({kind:"project",id:t.dataset.pickp,advForm:S.dr.kind==="newAdv",gForm:S.dr.kind==="newG"});setTimeout(()=>$("#a_gross,#g_no")?.focus(),0);return}
   if(t.dataset.advform!==undefined){S.advForm=t.dataset.advform==="1";S.dirty=false;renderDrawer();if(S.advForm)setTimeout(()=>$("#a_gross")?.focus(),0);return}
   if(t.dataset.act){S.act={id:t.dataset.act,kind:t.dataset.kind};render();if(S.dr)renderDrawer();setTimeout(()=>(document.querySelector("aside.drawer .iact")||document.querySelector(".iact"))?.querySelector("input")?.focus(),0);return}
   if(t.dataset.cancelact){S.act=null;render();if(S.dr)renderDrawer();return}
   if(t.dataset.doact){doAct(t.dataset.doact,t);return}
+  if(t.dataset.gact){S.gact={id:t.dataset.gact,kind:t.dataset.kind};render();if(S.dr)renderDrawer();setTimeout(()=>(document.querySelector("aside.drawer .iact")||document.querySelector(".iact"))?.querySelector("input")?.focus(),0);return}
+  if(t.dataset.cancelgact){S.gact=null;render();if(S.dr)renderDrawer();return}
+  if(t.dataset.dogact){doGAct(t.dataset.dogact,t);return}
+  if(t.dataset.gform!==undefined){S.gForm=t.dataset.gform==="1";S.dirty=false;renderDrawer();if(S.gForm)setTimeout(()=>$("#g_no")?.focus(),0);return}
+  if(t.dataset.g5){const e=EM[S.dr.id];const i=$("#g_amt");i.value=fmt(Math.round(e.c*0.05));i.dispatchEvent(new Event("input"));return}
+  if(t.dataset.ayr){S.ayr=t.dataset.ayr;vAllocs();return}
+  if(t.dataset.alloc){openDrawer({kind:"alloc",key:t.dataset.alloc});return}
+  if(t.dataset.goproj){if(EM[t.dataset.goproj])openDrawer({kind:"project",id:t.dataset.goproj});return}
+  if(t.dataset.gst){S.gst=t.dataset.gst;go("guar");return}
+  if(t.dataset.enf){toggleEnf();return}
   if(t.dataset.astage){S.astage=t.dataset.astage;go("advances");return}
   if(ev.target.closest("[data-noopen]"))return;
   if(t.closest("aside.drawer")&&!t.matches("[data-src]"))return;
@@ -845,6 +1087,7 @@ document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&S.dr)closeDrawer(
 let qt;document.addEventListener("input",ev=>{const id=ev.target.id;
   if(id==="q"){clearTimeout(qt);qt=setTimeout(()=>{S.q=ev.target.value;S.shown=60;vProjects();const q=$("#q");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="cq"){clearTimeout(qt);qt=setTimeout(()=>{S.cq=ev.target.value;vCompanies();const q=$("#cq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
+  if(id==="gq"){clearTimeout(qt);qt=setTimeout(()=>{S.gq=ev.target.value;vGuar();const q=$("#gq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="aq"){clearTimeout(qt);qt=setTimeout(()=>{S.aq=ev.target.value;vAdvances();const q=$("#aq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}});
 document.addEventListener("change",ev=>{const id=ev.target.id;
   if(id==="fplan"){S.plan=ev.target.value;S.shown=60;vProjects()}
@@ -861,14 +1104,17 @@ recompute();render();
   claude.use("user").then(async u=>{USER=u;if(u){try{UID=await u.id()}catch(_){}try{CANW=await u.can("data.write")}catch(_){}render();if(S.dr&&!S.dirty)renderDrawer()}}).catch(()=>{});
   const db=await claude.use("db").catch(()=>null);
   if(!db){clearTimeout(timer);DB=false;sync.textContent="الحفظ المشترك غير متاح";render();return}
-  const got={txns:false,advances:false,projects:false};
-  const resolveNames=async()=>{const ids=[...new Set([...TX.map(t=>t.by),...NP.map(p=>p.by),...ADV.flatMap(a=>(a.hist||[]).map(h=>h.by))].filter(x=>x&&!NAMES[x]))];
+  const got={txns:false,advances:false,projects:false,allocs:false,guarantees:false};
+  const resolveNames=async()=>{const ids=[...new Set([...TX.map(t=>t.by),...NP.map(p=>p.by),...ADV.flatMap(a=>(a.hist||[]).map(h=>h.by)),...AL.map(a=>a.by),...GU.flatMap(g=>(g.hist||[]).map(h=>h.by)),...(SET.hist||[]).map(h=>h.by)].filter(x=>x&&!NAMES[x]))];
     if(USER&&ids.length&&USER.profiles){try{const ps=await USER.profiles(ids.slice(0,64));for(const i of ids)NAMES[i]=(ps[i]&&ps[i].name)||"مستخدم";if(cur()==="journal")vJournal()}catch(_){}}};
   const onData=()=>{clearTimeout(timer);DB=db;const ok=Object.values(got).every(Boolean);
-    sync.textContent=ok?`متصل · ${fmt(ADV.length)} سلفة · ${fmt(TX.length)} حركة`:"جارٍ التحميل…";sync.classList.toggle("on",ok);refreshAll();resolveNames()};
+    sync.textContent=ok?`متصل · ${fmt(ADV.length)} سلفة · ${fmt(GU.length)} ضمان`:"جارٍ التحميل…";sync.classList.toggle("on",ok);refreshAll();resolveNames()};
   const fail=()=>{clearTimeout(timer);DB=false;sync.textContent="تعذّر الاتصال بقاعدة البيانات";render()};
   db.collection("txns").orderBy("at","desc").limit(1000).onSnapshot(s=>{TX=s.docs.map(d=>({_id:d.id,...d.data()})).filter(t=>t&&t.pid);got.txns=true;onData()},fail);
   db.collection("advances").orderBy("at","desc").limit(1000).onSnapshot(s=>{ADV=s.docs.map(d=>({_id:d.id,...d.data()})).filter(a=>a&&a.pid);got.advances=true;onData()},fail);
+  db.collection("allocs").orderBy("at","desc").limit(1000).onSnapshot(s=>{AL=s.docs.map(d=>({_id:d.id,...d.data()})).filter(a=>a&&a.pl&&a.yr);got.allocs=true;onData()},fail);
+  db.collection("guarantees").orderBy("at","desc").limit(1000).onSnapshot(s=>{GU=s.docs.map(d=>({_id:d.id,...d.data()})).filter(g=>g&&g.pid);got.guarantees=true;onData()},fail);
+  db.collection("settings").doc("main").onSnapshot(s=>{const d=(s.exists&&s.data())||{};SET={enforce:d.enforce!==false,hist:d.hist||[]};refreshAll()},()=>{});
   db.collection("projects").orderBy("at","desc").limit(1000).onSnapshot(s=>{NP=s.docs.map(d=>({_id:d.id,...d.data()})).filter(p=>p&&p.nm);got.projects=true;onData()},fail);
 })();
 </script>
