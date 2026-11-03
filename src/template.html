@@ -1,0 +1,498 @@
+<title>النظام المالي لديوان الأنبار</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cairo:wght@600;700;800&family=Tajawal:wght@400;500;700&display=swap">
+<style>
+/* تخطيط: شريط علوي كحلي ثابت + تبويبات، محتوى بعرض 1200px، درج جانبي لبطاقة المشروع */
+:root{
+  --bg:#f2f4f7;--surface:#ffffff;--surface2:#f7f8fa;--ink:#14213a;--muted:#5b6578;--line:#dde2ea;
+  --navy:#1d3557;--accent:#1d3557;--gold:#a57f35;--head:#1d3557;--head-ink:#ffffff;--head-muted:#c9d3e3;
+  --ok:#2e7d4f;--warn:#a86a12;--bad:#b42318;--info:#2563a8;--idle:#6f7a8b;
+  --f-ui:"Tajawal","Segoe UI",Tahoma,system-ui,sans-serif;--f-head:"Cairo","Segoe UI",Tahoma,system-ui,sans-serif;
+  --r:10px;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0e1520;--surface:#162030;--surface2:#1b273a;--ink:#e5eaf2;--muted:#9aa6b8;--line:#28354b;
+  --navy:#9dbbe6;--accent:#9dbbe6;--gold:#d4b06a;--head:#111b2a;--head-ink:#f1f4f9;--head-muted:#93a2b8;
+  --ok:#5cc28a;--warn:#e0a84a;--bad:#f07167;--info:#6aa6e8;--idle:#8b95a5;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0e1520;--surface:#162030;--surface2:#1b273a;--ink:#e5eaf2;--muted:#9aa6b8;--line:#28354b;
+  --navy:#9dbbe6;--accent:#9dbbe6;--gold:#d4b06a;--head:#111b2a;--head-ink:#f1f4f9;--head-muted:#93a2b8;
+  --ok:#5cc28a;--warn:#e0a84a;--bad:#f07167;--info:#6aa6e8;--idle:#8b95a5;color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-ui);font-size:15px;line-height:1.55}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--head)}
+.wrap{max-width:1240px;margin-inline:auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.num{font-variant-numeric:tabular-nums;direction:ltr;unicode-bidi:isolate}
+h1,h2,h3{font-family:var(--f-head);text-wrap:balance;margin:0}
+button,select,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--head);color:var(--head-ink);box-shadow:0 1px 0 rgba(0,0,0,.15)}
+.topbar{display:flex;align-items:center;gap:14px;padding-block:10px;flex-wrap:wrap}
+.seal{width:38px;height:38px;border-radius:50%;border:2px solid var(--gold);display:grid;place-items:center;font-family:var(--f-head);font-weight:800;color:var(--gold);flex:none}
+.brand{min-width:0;flex:1}
+.brand h1{font-size:17px;line-height:1.3}
+.brand p{margin:0;font-size:12.5px;color:var(--head-muted)}
+.sync{font-size:12px;padding:4px 10px;border-radius:99px;border:1px solid rgba(255,255,255,.25);color:var(--head-muted);white-space:nowrap}
+.sync.on{color:#bfe8cf;border-color:rgba(130,210,160,.5)}
+nav.tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav.tabs::-webkit-scrollbar{display:none}
+nav.tabs a{color:var(--head-muted);text-decoration:none;padding:9px 14px 10px;border-bottom:3px solid transparent;white-space:nowrap;font-weight:500}
+nav.tabs a[aria-current="page"]{color:var(--head-ink);border-bottom-color:var(--gold);font-weight:700}
+nav.tabs a .cnt{font-size:11px;background:var(--bad);color:#fff;border-radius:99px;padding:0 6px;margin-inline-start:4px}
+
+main{padding-block:18px 60px}
+#app{overflow-x:clip}
+.srcbar>*{max-width:100%}
+.view{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.view>*{min-width:0}
+.srcbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.srcbar span{font-size:13px;color:var(--muted);margin-inline-end:4px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:99px;padding:5px 12px;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--navy);border-color:var(--navy);color:var(--bg)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;display:grid;gap:2px}
+.kpi .l{font-size:13px;color:var(--muted)}
+.kpi .v{font-family:var(--f-head);font-size:24px;font-weight:700;color:var(--accent)}
+.kpi .s{font-size:12.5px;color:var(--muted)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,460px),1fr));gap:16px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:16px;min-width:0}
+.card h2{font-size:16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.card h2 small{font-family:var(--f-ui);font-weight:400;font-size:12.5px;color:var(--muted)}
+.bars{display:grid;gap:10px}
+.bar{min-width:0}
+.bar .t{display:flex;justify-content:space-between;gap:2px 10px;font-size:13.5px;flex-wrap:wrap}
+.bar .t b{font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bar .t span{color:var(--muted);font-size:12.5px}
+.track{height:10px;background:var(--surface2);border:1px solid var(--line);border-radius:99px;overflow:hidden;margin-top:4px;position:relative}
+.track i{position:absolute;inset-block:0;inset-inline-start:0;background:var(--navy);border-radius:99px}
+.track i.c{background:color-mix(in srgb,var(--gold) 45%,transparent)}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--muted);margin-top:10px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-inline-end:5px;vertical-align:-1px}
+
+.pill{display:inline-block;font-size:12px;padding:2px 9px;border-radius:99px;white-space:nowrap;font-weight:500;border:1px solid}
+.s-done{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 40%,transparent);background:color-mix(in srgb,var(--ok) 10%,transparent)}
+.s-bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 40%,transparent);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.s-warn{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 40%,transparent);background:color-mix(in srgb,var(--warn) 10%,transparent)}
+.s-info{color:var(--info);border-color:color-mix(in srgb,var(--info) 40%,transparent);background:color-mix(in srgb,var(--info) 10%,transparent)}
+.s-idle{color:var(--idle);border-color:color-mix(in srgb,var(--idle) 40%,transparent);background:color-mix(in srgb,var(--idle) 8%,transparent)}
+
+.stlist{display:grid;gap:8px}
+.strow{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;font-size:13.5px;cursor:pointer;padding:4px 6px;border-radius:6px;background:none;border:0;text-align:start;width:100%}
+.strow:hover{background:var(--surface2)}
+.strow .n{color:var(--muted)}
+
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.filters>*{flex:1 1 150px;min-width:0}
+.filters input[type=search]{flex:1 1 100%}
+@media (min-width:900px){.filters input[type=search]{flex-basis:300px}}
+.inp{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:0;max-width:100%}
+.btn{background:var(--navy);color:var(--bg);border:0;border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:700;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--line)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.summary{font-size:13.5px;color:var(--muted);display:flex;gap:16px;flex-wrap:wrap}
+.summary b{color:var(--ink);font-weight:700}
+.activef{display:flex;gap:6px;flex-wrap:wrap}
+.activef button{font-size:12.5px;border:1px solid var(--gold);color:var(--gold);background:transparent;border-radius:99px;padding:3px 10px;cursor:pointer}
+
+.tbl-wrap{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:auto;max-height:70vh}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);vertical-align:top}
+thead th{position:sticky;top:0;background:var(--surface2);font-weight:700;font-size:12.5px;color:var(--muted);z-index:1;white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--surface2)}
+td.n,th.n{text-align:left;white-space:nowrap}
+td.t{color:var(--muted);width:44px}
+.pname{font-weight:500}
+.pco{color:var(--muted);font-size:12.5px}
+.mini{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.mini .track{width:60px;margin:0;height:7px}
+.flag{color:var(--bad);font-size:12px;font-weight:700}
+.more{display:flex;justify-content:center;padding:12px}
+
+/* بطاقات على الهاتف */
+@media (max-width:720px){
+  .tbl-wrap.cards{max-height:none;border:0;background:none;overflow:visible}
+  .cards table,.cards tbody{display:block}
+  .cards thead{display:none}
+  .cards tr{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px;margin-bottom:10px}
+  .cards td{border:0;padding:0;min-width:0;overflow-wrap:anywhere}
+  .cards td.t{display:none}
+  .cards td.wide{grid-column:1/-1}
+  .cards td[data-l]::before{content:attr(data-l);display:block;font-size:11.5px;color:var(--muted)}
+  .cards td.n{text-align:right}
+  .cards .mini{justify-content:flex-start}
+}
+
+.alerts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px}
+.al{background:var(--surface);border:1px solid var(--line);border-inline-start:4px solid var(--warn);border-radius:var(--r);padding:14px 16px;display:grid;gap:6px}
+.al.bad{border-inline-start-color:var(--bad)}
+.al.info{border-inline-start-color:var(--info)}
+.al h3{font-size:15px;display:flex;justify-content:space-between;gap:8px}
+.al h3 .num{font-size:20px}
+.al p{margin:0;font-size:13px;color:var(--muted)}
+.al .btn{justify-self:start}
+
+/* الدرج */
+.scrim{position:fixed;inset:0;background:rgba(10,15,25,.45);z-index:40}
+aside.drawer{position:fixed;inset-block:0;inset-inline-end:0;width:min(720px,100%);background:var(--bg);z-index:41;overflow-y:auto;box-shadow:0 0 30px rgba(0,0,0,.25);padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+.dhead{position:sticky;top:0;background:var(--head);color:var(--head-ink);padding:14px max(16px,env(safe-area-inset-left,0px)) 14px max(16px,env(safe-area-inset-right,0px));display:flex;gap:12px;align-items:flex-start;z-index:2}
+.dhead h2{font-size:16px;line-height:1.5;flex:1;min-width:0}
+.dhead p{margin:4px 0 0;font-size:12.5px;color:var(--head-muted);font-family:var(--f-ui);font-weight:400}
+.x{background:transparent;border:1px solid rgba(255,255,255,.3);color:var(--head-ink);border-radius:8px;width:36px;height:36px;cursor:pointer;flex:none;font-size:18px}
+.dbody{padding:16px max(16px,env(safe-area-inset-left,0px)) 40px max(16px,env(safe-area-inset-right,0px));display:grid;gap:14px}
+.figs{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.fig{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.fig .l{font-size:12px;color:var(--muted)}
+.fig .v{font-weight:700;font-size:15px}
+.fig.hl .v{color:var(--accent)}
+.alist{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.alist li{font-size:13px;padding:7px 10px;border-radius:6px;background:color-mix(in srgb,var(--bad) 8%,transparent);color:var(--bad)}
+.alist li.warn{background:color-mix(in srgb,var(--warn) 10%,transparent);color:var(--warn)}
+.alist li.info{background:color-mix(in srgb,var(--info) 9%,transparent);color:var(--info)}
+form.tx{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+form.tx label{display:grid;gap:4px;font-size:12.5px;color:var(--muted)}
+form.tx .full{grid-column:1/-1}
+.note{font-size:12.5px;color:var(--muted);margin:0}
+.ylist{display:flex;align-items:flex-end;gap:6px;height:150px;padding-top:18px;overflow-x:auto}
+.ycol{flex:1 0 42px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:4px}
+.ycol i{width:70%;background:var(--navy);border-radius:4px 4px 0 0;min-height:1px}
+.ycol span{font-size:10.5px;color:var(--muted);text-align:center;line-height:1.2}
+.ycol b{font-size:10.5px;font-weight:500}
+details.raw summary{cursor:pointer;font-weight:700;font-family:var(--f-head);font-size:15px}
+.rawt td:first-child{color:var(--muted);width:45%}
+.empty{padding:28px;text-align:center;color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:var(--r)}
+.toast{position:fixed;bottom:calc(20px + env(safe-area-inset-bottom,0px));inset-inline-start:50%;transform:translateX(50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:8px;z-index:60;font-size:14px}
+.foot{font-size:12px;color:var(--muted);text-align:center;padding-block:10px}
+@media (prefers-reduced-motion:no-preference){aside.drawer{animation:slide .18s ease-out}@keyframes slide{from{transform:translateX(-24px);opacity:.6}}}
+</style>
+
+<div dir="rtl" lang="ar" id="app">
+<header class="top">
+  <div class="wrap topbar">
+    <div class="seal" aria-hidden="true">م</div>
+    <div class="brand">
+      <h1>النظام المالي لديوان محافظة الأنبار</h1>
+      <p>قسم الشؤون المالية · نموذج أولي · البيانات حتى 31-10-2026</p>
+    </div>
+    <span class="sync" id="sync">جارٍ الاتصال بقاعدة الحركات…</span>
+  </div>
+  <div class="wrap"><nav class="tabs" id="tabs">
+    <a href="#dash">لوحة القيادة</a>
+    <a href="#projects">سجل المشاريع</a>
+    <a href="#companies">الشركات</a>
+    <a href="#alerts">الإنذار المبكر<span class="cnt" id="alcnt"></span></a>
+    <a href="#journal">سجل الحركات</a>
+  </nav></div>
+</header>
+
+<main class="wrap">
+  <section class="view" id="v-dash"></section>
+  <section class="view" id="v-projects" hidden></section>
+  <section class="view" id="v-companies" hidden></section>
+  <section class="view" id="v-alerts" hidden></section>
+  <section class="view" id="v-journal" hidden></section>
+  <p class="foot">المصدر: ملف الموقف المالي العام 31-10-2026 وملف إعادة الاستقرار والمنافذ الحدودية. الأرقام بالدينار العراقي (د.ع).</p>
+</main>
+<div id="drawerHost"></div>
+</div>
+
+<script type="application/json" id="data">__DATA__</script>
+<script>
+document.documentElement.lang="ar";document.documentElement.dir="rtl";
+const P=JSON.parse(document.getElementById("data").textContent);
+const $=(s,r=document)=>r.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt=n=>Math.round(n||0).toLocaleString("en-US");
+const big=n=>{n=n||0;const a=Math.abs(n);
+  if(a>=1e12)return (n/1e12).toFixed(2)+" ترليون";
+  if(a>=1e9)return (n/1e9).toFixed(1)+" مليار";
+  if(a>=1e6)return (n/1e6).toFixed(1)+" مليون";return fmt(n)};
+const pct=x=>(x==null||!isFinite(x))?"—":(x*100).toFixed(1)+"%";
+const norm=s=>String(s||"").replace(/[إأآٱ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/[ًٌٍَُِّْـ]/g,"").replace(/\s+/g," ").trim().toLowerCase();
+const coKey=s=>norm(String(s||"").split("/")[0].replace(/^شركة\s+/,""));
+const coName=s=>String(s||"").split("/")[0].trim();
+const SOURCES=["الكل",...new Set(P.map(p=>p.src))];
+const TYPES={raise:"رفع سلفة",pay:"صرف",change:"أمر غيار",status:"تغيير حالة",note:"ملاحظة"};
+const STATUS_OPTS=["منجز","قيد التنفيذ","متلكئ","متوقف","فسخ عقد","قيد إجراء التسوية","انتفاء حاجة"];
+
+function stClass(s){s=s||"";
+  if(s.includes("فسخ")&&!s.includes("منجز"))return "s-bad";
+  if(s.startsWith("منجز")||s.includes("(منجز)"))return "s-done";
+  if(s.includes("تسوية")||s.includes("متلكئ")||s.includes("متوقف"))return "s-warn";
+  if(s==="غير محددة"||s.includes("انتفاء"))return "s-idle";
+  return "s-info"}
+
+/* قواعد الإنذار المبكر */
+const RULES=[
+ {id:"over",sev:"bad",t:"صرف يتجاوز مبلغ العقد",d:"المصروف الكلي أكبر من مبلغ العقد بعد التغيير. يجب التحقق فوراً من سبب الزيادة.",f:p=>p.c>0&&p.sp>p.c*1.0001},
+ {id:"fasakh",sev:"bad",t:"عقود مفسوخة عليها مبالغ مصروفة",d:"تأكد من استرداد المبالغ ومصادرة الضمانات وتسوية الحساب.",f:p=>p.st.includes("فسخ")&&!p.st.includes("منجز")&&p.sp>0},
+ {id:"ap",sev:"warn",t:"العقد بعد التغيير أكبر من الكلفة المصادقة",d:"المبلغ المتعاقد عليه تجاوز الكلفة المصادق عليها، ويحتاج إلى تعزيز التخصيص أو تبرير.",f:p=>p.ap>0&&p.c>p.ap*1.0001},
+ {id:"chg",sev:"warn",t:"أوامر تغيير تزيد على 20% من العقد",d:"ارتفع مبلغ العقد أكثر من 20% عن مبلغه الأصلي.",f:p=>p.c0>0&&p.c>p.c0*1.2},
+ {id:"done0",sev:"warn",t:"مشروع منجز بلا صرف",d:"حالته منجز ولم يُسجَّل عليه أي صرف. قد يكون خطأ إدخال.",f:p=>p.st==="منجز"&&!p.sp},
+ {id:"pend",sev:"info",t:"سلف بانتظار الصرف",d:"مبالغ سلف مستحقة لم تُصرف بعد.",f:p=>p.pend>0},
+ {id:"nost",sev:"info",t:"حالة المشروع غير محددة",d:"لا توجد حالة مسجلة. توحيد الحالات شرط لصحة التقارير.",f:p=>p.st==="غير محددة"},
+ {id:"noc",sev:"info",t:"مبلغ العقد غير مدخل",d:"لا يوجد مبلغ عقد، فلا يمكن حساب نسبة الصرف.",f:p=>!p.c},
+];
+
+/* الحالة */
+const S={src:"الكل",q:"",plan:"",st:"",sort:"c",co:"",rule:"",shown:60,cq:"",open:null};
+let TX=[],E=[],DB=null,USER=null,CANW=null,DL=null,NAMES={};
+
+function recompute(){
+  const by={};for(const t of TX)(by[t.pid]=by[t.pid]||[]).push(t);
+  E=P.map(p=>{const e={...p,tx:by[p.id]||[]};let raised=0,paid=0;
+    const tx=[...e.tx].sort((a,b)=>(a.at||"").localeCompare(b.at||""));
+    for(const t of tx){const a=+t.amt||0;
+      if(t.type==="pay"){e.sp+=a;paid+=a}
+      else if(t.type==="raise")raised+=a;
+      else if(t.type==="change")e.c+=a;
+      else if(t.type==="status"&&t.newSt)e.st=t.newSt;}
+    e.pend=Math.max(0,(p.adv||0)+raised-paid);
+    e.rate=e.c>0?e.sp/e.c:null;
+    e.al=RULES.filter(r=>r.f(e)).map(r=>r.id);
+    e.k=norm(e.nm+" "+e.co);e.ck=coKey(e.co);return e});
+}
+const inSrc=e=>S.src==="الكل"||e.src===S.src;
+
+/* لوحة القيادة */
+function vDash(){
+  const L=E.filter(inSrc);
+  const sum=(a,f)=>a.reduce((s,x)=>s+f(x),0);
+  const C=sum(L,e=>e.c),SP=sum(L,e=>e.sp),REM=sum(L,e=>Math.max(0,e.c-e.sp)),PEND=sum(L,e=>e.pend),AP=sum(L,e=>e.ap);
+  const plans={};for(const e of L){const k=e.pl;(plans[k]=plans[k]||{n:0,c:0,sp:0});plans[k].n++;plans[k].c+=e.c;plans[k].sp+=e.sp}
+  const pl=Object.entries(plans).sort((a,b)=>b[1].c-a[1].c);const maxC=Math.max(1,...pl.map(x=>x[1].c));
+  const sts={};for(const e of L){(sts[e.st]=sts[e.st]||{n:0,c:0});sts[e.st].n++;sts[e.st].c+=e.c}
+  const st=Object.entries(sts).sort((a,b)=>b[1].n-a[1].n);
+  const cos={};for(const e of L){(cos[e.ck]=cos[e.ck]||{nm:coName(e.co),n:0,c:0,sp:0});cos[e.ck].n++;cos[e.ck].c+=e.c;cos[e.ck].sp+=e.sp}
+  const top=Object.entries(cos).filter(x=>x[0]).sort((a,b)=>b[1].c-a[1].c).slice(0,10);const maxT=Math.max(1,...top.map(x=>x[1].c));
+  const yrs={};for(const e of L)for(const [y,v] of (e.yrs||[]))yrs[y]=(yrs[y]||0)+v;
+  const ys=Object.entries(yrs);const maxY=Math.max(1,...ys.map(x=>x[1]));
+  const al=RULES.map(r=>({r,n:L.filter(e=>e.al.includes(r.id)).length})).filter(x=>x.n);
+  $("#v-dash").innerHTML=`
+  <div class="srcbar"><span>نطاق البيانات:</span>${SOURCES.map(s=>`<button class="chip" data-src="${esc(s)}" aria-pressed="${s===S.src}">${esc(s)}</button>`).join("")}</div>
+  <div class="kpis">
+    <div class="kpi"><span class="l">عدد المشاريع</span><span class="v num">${fmt(L.length)}</span><span class="s">${fmt(Object.keys(cos).length)} شركة متعاقدة</span></div>
+    <div class="kpi"><span class="l">مبالغ العقود بعد التغيير</span><span class="v">${big(C)}</span><span class="s">الكلفة المصادقة: ${big(AP)}</span></div>
+    <div class="kpi"><span class="l">المصروف الكلي</span><span class="v">${big(SP)}</span><span class="s">نسبة الصرف ${pct(C?SP/C:null)} من العقود</span></div>
+    <div class="kpi"><span class="l">المتبقي للدفع على العقود</span><span class="v">${big(REM)}</span><span class="s">التزامات قائمة على المحافظة</span></div>
+    <div class="kpi"><span class="l">سلف بانتظار الصرف</span><span class="v">${big(PEND)}</span><span class="s">${fmt(L.filter(e=>e.pend>0).length)} مشروعاً</span></div>
+  </div>
+  <div class="grid2">
+    <div class="card"><h2>العقود والصرف حسب الخطة <small>اضغط على الخطة لعرض مشاريعها</small></h2>
+      <div class="bars">${pl.map(([k,v])=>`<div class="bar" role="button" tabindex="0" data-plan="${esc(k)}" style="cursor:pointer">
+        <div class="t"><b>${esc(k)}</b><span>${fmt(v.n)} مشروع · ${big(v.sp)} من ${big(v.c)}</span></div>
+        <div class="track"><i class="c" style="width:${v.c/maxC*100}%"></i><i style="width:${v.sp/maxC*100}%"></i></div></div>`).join("")}</div>
+      <div class="legend"><span><i style="background:var(--navy)"></i>المصروف</span><span><i style="background:color-mix(in srgb,var(--gold) 45%,transparent)"></i>مبلغ العقود</span></div>
+    </div>
+    <div class="card"><h2>المشاريع حسب الحالة</h2>
+      <div class="stlist">${st.map(([k,v])=>`<button class="strow" data-st="${esc(k)}"><span class="pill ${stClass(k)}">${esc(k)}</span><span class="n">${big(v.c)}</span><b class="num">${fmt(v.n)}</b></button>`).join("")}</div>
+    </div>
+    <div class="card"><h2>أكبر 10 شركات حسب قيمة العقود</h2>
+      <div class="bars">${top.map(([k,v])=>`<div class="bar" role="button" tabindex="0" data-co="${esc(k)}" style="cursor:pointer">
+        <div class="t"><b>${esc(v.nm)}</b><span>${fmt(v.n)} عقد · ${big(v.c)}</span></div>
+        <div class="track"><i class="c" style="width:${v.c/maxT*100}%"></i><i style="width:${v.sp/maxT*100}%"></i></div></div>`).join("")}</div>
+    </div>
+    <div class="card"><h2>الإنذار المبكر <small><a href="#alerts" style="color:var(--accent)">عرض الكل</a></small></h2>
+      <div class="stlist">${al.map(x=>`<button class="strow" data-rule="${x.r.id}"><span class="pill ${x.r.sev==="bad"?"s-bad":x.r.sev==="warn"?"s-warn":"s-info"}">${x.r.sev==="bad"?"حرج":x.r.sev==="warn"?"تنبيه":"متابعة"}</span><span>${esc(x.r.t)}</span><b class="num">${fmt(x.n)}</b></button>`).join("")||'<p class="note">لا توجد تنبيهات في هذا النطاق.</p>'}</div>
+    </div>
+    ${ys.length&&ys.some(y=>y[1]>0)?`<div class="card"><h2>الصرف حسب السنوات <small>ملفا إعادة الاستقرار والمنافذ الحدودية</small></h2>
+      <div class="ylist">${ys.map(([y,v])=>`<div class="ycol"><b>${big(v).replace(" مليار","م")}</b><i style="height:${v/maxY*100}%"></i><span>${esc(y.replace("عام ","").replace("2013-2014-2015-2016-2017-2018-2019-2020","2013–2020").replace("2013-2014-2015-2016-2017-2018-2019","2013–2019"))}</span></div>`).join("")}</div>
+      <p class="note">القيم بالمليار دينار (م = مليار).</p></div>`:""}
+  </div>`;
+}
+
+/* سجل المشاريع */
+function filtered(){
+  const q=norm(S.q);let L=E.filter(e=>inSrc(e)&&(!S.plan||e.pl===S.plan)&&(!S.st||e.st===S.st)&&(!S.co||e.ck===S.co)&&(!S.rule||e.al.includes(S.rule))&&(!q||e.k.includes(q)));
+  const k={c:(a,b)=>b.c-a.c,sp:(a,b)=>b.sp-a.sp,rate:(a,b)=>(a.rate??9)-(b.rate??9),rem:(a,b)=>(b.c-b.sp)-(a.c-a.sp),al:(a,b)=>b.al.length-a.al.length,nm:(a,b)=>a.nm.localeCompare(b.nm,"ar")}[S.sort];
+  return L.sort(k);
+}
+function vProjects(){
+  const plans=[...new Set(E.filter(inSrc).map(e=>e.pl))].sort();
+  const sts=[...new Set(E.filter(inSrc).map(e=>e.st))].sort();
+  const L=filtered();const show=L.slice(0,S.shown);
+  const C=L.reduce((s,e)=>s+e.c,0),SP=L.reduce((s,e)=>s+e.sp,0);
+  const coN=S.co?(E.find(e=>e.ck===S.co)||{}).co:"";const rl=RULES.find(r=>r.id===S.rule);
+  $("#v-projects").innerHTML=`
+  <div class="srcbar"><span>نطاق البيانات:</span>${SOURCES.map(s=>`<button class="chip" data-src="${esc(s)}" aria-pressed="${s===S.src}">${esc(s)}</button>`).join("")}</div>
+  <div class="filters">
+    <input class="inp" type="search" id="q" placeholder="ابحث باسم المشروع أو الشركة…" value="${esc(S.q)}">
+    <select class="inp" id="fplan"><option value="">كل الخطط</option>${plans.map(p=>`<option ${p===S.plan?"selected":""}>${esc(p)}</option>`).join("")}</select>
+    <select class="inp" id="fst"><option value="">كل الحالات</option>${sts.map(p=>`<option ${p===S.st?"selected":""}>${esc(p)}</option>`).join("")}</select>
+    <select class="inp" id="fsort">
+      ${[["c","الأعلى قيمة عقد"],["sp","الأعلى صرفاً"],["rem","الأكبر متبقياً"],["rate","الأقل نسبة صرف"],["al","الأكثر تنبيهات"],["nm","حسب الاسم"]].map(([v,t])=>`<option value="${v}" ${v===S.sort?"selected":""}>${t}</option>`).join("")}
+    </select>
+    ${DL?'<button class="btn ghost" id="exp">تصدير CSV</button>':""}
+  </div>
+  ${(S.co||S.rule)?`<div class="activef">${S.co?`<button data-clr="co">الشركة: ${esc(coName(coN))} ✕</button>`:""}${rl?`<button data-clr="rule">تنبيه: ${esc(rl.t)} ✕</button>`:""}</div>`:""}
+  <div class="summary"><span>النتائج: <b class="num">${fmt(L.length)}</b> مشروع</span><span>العقود: <b>${big(C)}</b></span><span>المصروف: <b>${big(SP)}</b></span><span>نسبة الصرف: <b class="num">${pct(C?SP/C:null)}</b></span></div>
+  ${L.length?`<div class="tbl-wrap cards"><table><thead><tr><th>ت</th><th>المشروع والشركة</th><th>الخطة</th><th>الحالة</th><th class="n">العقد بعد التغيير</th><th class="n">المصروف</th><th class="n">نسبة الصرف</th><th>تنبيهات</th></tr></thead><tbody>
+  ${show.map((e,i)=>`<tr data-id="${e.id}"><td class="t num">${i+1}</td>
+   <td class="wide"><div class="pname">${esc(e.nm)}</div><div class="pco">${esc(e.co)}</div></td>
+   <td data-l="الخطة">${esc(e.pl)}</td><td data-l="الحالة"><span class="pill ${stClass(e.st)}">${esc(e.st)}</span></td>
+   <td class="n" data-l="العقد بعد التغيير"><span class="num">${fmt(e.c)}</span></td>
+   <td class="n" data-l="المصروف"><span class="num">${fmt(e.sp)}</span></td>
+   <td class="n" data-l="نسبة الصرف"><div class="mini"><span class="num">${pct(e.rate)}</span><div class="track"><i style="width:${Math.min(100,(e.rate||0)*100)}%;${e.rate>1.0001?"background:var(--bad)":""}"></i></div></div></td>
+   <td data-l="تنبيهات">${e.al.length?`<span class="flag">${e.al.length} ⚠</span>`:"—"}${e.tx.length?` <span class="pill s-info">${e.tx.length} حركة</span>`:""}</td></tr>`).join("")}
+  </tbody></table></div>
+  ${L.length>S.shown?`<div class="more"><button class="btn ghost" id="moreb">عرض ${fmt(Math.min(100,L.length-S.shown))} مشروع إضافي (المعروض ${fmt(S.shown)} من ${fmt(L.length)})</button></div>`:""}`
+  :`<div class="empty">لا توجد مشاريع تطابق البحث والتصفية الحالية. جرّب مسح عوامل التصفية.</div>`}`;
+}
+
+/* الشركات */
+function vCompanies(){
+  const cos={};for(const e of E.filter(inSrc)){if(!e.ck)continue;const c=(cos[e.ck]=cos[e.ck]||{k:e.ck,nm:coName(e.co),n:0,c:0,sp:0,f:0,al:0});c.n++;c.c+=e.c;c.sp+=e.sp;if(e.st.includes("فسخ")&&!e.st.includes("منجز"))c.f++;c.al+=e.al.filter(a=>a==="over"||a==="fasakh"||a==="ap").length}
+  const q=norm(S.cq);const L=Object.values(cos).filter(c=>!q||norm(c.nm).includes(q)).sort((a,b)=>b.c-a.c);
+  $("#v-companies").innerHTML=`
+  <div class="filters"><input class="inp" type="search" id="cq" placeholder="ابحث عن شركة…" value="${esc(S.cq)}"></div>
+  <p class="note">تُجمع الشركة الواحدة تلقائياً حتى لو كُتب اسمها بصيغ مختلفة (الهمزات، التاء المربوطة، اسم المدير بعد "/"). العدد: <b class="num">${fmt(L.length)}</b> شركة.</p>
+  <div class="tbl-wrap cards"><table><thead><tr><th>ت</th><th>الشركة</th><th class="n">عدد العقود</th><th class="n">قيمة العقود</th><th class="n">المصروف</th><th class="n">عقود مفسوخة</th><th class="n">تنبيهات حرجة</th></tr></thead><tbody>
+  ${L.slice(0,300).map((c,i)=>`<tr data-co="${esc(c.k)}"><td class="t num">${i+1}</td><td class="wide pname">${esc(c.nm)}</td>
+  <td class="n" data-l="عدد العقود"><span class="num">${c.n}</span></td><td class="n" data-l="قيمة العقود"><span class="num">${fmt(c.c)}</span></td>
+  <td class="n" data-l="المصروف"><span class="num">${fmt(c.sp)}</span></td>
+  <td class="n" data-l="عقود مفسوخة">${c.f?`<span class="pill s-bad">${c.f}</span>`:"—"}</td><td class="n" data-l="تنبيهات حرجة">${c.al?`<span class="flag">${c.al}</span>`:"—"}</td></tr>`).join("")}
+  </tbody></table></div>${L.length>300?'<p class="note">يُعرض أول 300 شركة. استخدم البحث للوصول إلى غيرها.</p>':""}`;
+}
+
+/* الإنذار */
+function vAlerts(){
+  const L=E.filter(inSrc);
+  $("#v-alerts").innerHTML=`
+  <div class="srcbar"><span>نطاق البيانات:</span>${SOURCES.map(s=>`<button class="chip" data-src="${esc(s)}" aria-pressed="${s===S.src}">${esc(s)}</button>`).join("")}</div>
+  <p class="note">قواعد آلية تُفحص على كل مشروع عند كل تحديث. في النظام الكامل تُرسل إشعاراً للمسؤول المختص وتمنع بعض العمليات قبل وقوعها (مثل صرف يتجاوز العقد).</p>
+  <div class="alerts">${RULES.map(r=>{const M=L.filter(e=>e.al.includes(r.id));const amt=r.id==="over"?M.reduce((s,e)=>s+e.sp-e.c,0):r.id==="pend"?M.reduce((s,e)=>s+e.pend,0):r.id==="ap"?M.reduce((s,e)=>s+e.c-e.ap,0):M.reduce((s,e)=>s+e.sp,0);
+    return `<div class="al ${r.sev}"><h3><span>${esc(r.t)}</span><span class="num">${fmt(M.length)}</span></h3><p>${esc(r.d)}</p>
+    ${M.length&&r.id!=="noc"&&r.id!=="nost"?`<p>المبلغ المعني: <b>${big(amt)}</b> د.ع</p>`:""}
+    ${M.length?`<button class="btn ghost" data-rule="${r.id}">عرض المشاريع</button>`:""}</div>`}).join("")}</div>`;
+}
+
+/* سجل الحركات */
+function vJournal(){
+  const pm=Object.fromEntries(P.map(p=>[p.id,p]));
+  let body;
+  if(DB===false)body=`<div class="empty">قاعدة الحركات المشتركة غير متاحة في هذا العرض. افتح الصفحة من حساب claude.ai مسجَّل لتسجيل الحركات ومشاهدتها.</div>`;
+  else if(!TX.length)body=`<div class="empty">لم تُسجَّل أي حركة بعد. افتح أي مشروع من <a href="#projects" style="color:var(--accent)">سجل المشاريع</a> واستخدم نموذج «تسجيل حركة مالية» لإضافة أول حركة: رفع سلفة، أو صرف، أو أمر غيار، أو تغيير حالة.</div>`;
+  else body=`<div class="tbl-wrap cards"><table><thead><tr><th>ت</th><th>تاريخ الحركة</th><th>المشروع</th><th>النوع</th><th class="n">المبلغ</th><th>المرجع</th><th>الملاحظة</th><th>أدخلها</th></tr></thead><tbody>
+  ${TX.map((t,i)=>`<tr data-id="${esc(t.pid)}"><td class="t num">${i+1}</td><td data-l="التاريخ"><span class="num">${esc(t.date)}</span></td><td class="wide pname">${esc(pm[t.pid]?.nm||t.pid)}</td>
+  <td data-l="النوع"><span class="pill ${t.type==="pay"?"s-done":t.type==="raise"?"s-info":t.type==="change"?"s-warn":"s-idle"}">${esc(TYPES[t.type]||t.type)}</span>${t.newSt?` ← ${esc(t.newSt)}`:""}</td>
+  <td class="n" data-l="المبلغ"><span class="num">${t.amt?fmt(t.amt):"—"}</span></td><td data-l="المرجع">${esc(t.ref||"—")}</td><td class="wide" data-l="الملاحظة">${esc(t.note||"—")}</td>
+  <td data-l="أدخلها">${esc(NAMES[t.by]||"مستخدم")}<div class="pco num">${esc((t.at||"").replace("T"," ").slice(0,16))}</div></td></tr>`).join("")}</tbody></table></div>`;
+  $("#v-journal").innerHTML=`<p class="note">كل حركة تُحفظ بتاريخها ومدخلها ولا تُحذف. التصحيح يكون بحركة عكسية (مبلغ سالب)، وهذا مبدأ سجل التدقيق في الأنظمة المالية الحكومية.</p>${body}`;
+}
+
+/* بطاقة المشروع */
+function openProject(id){S.open=id;renderDrawer()}
+function closeProject(){S.open=null;$("#drawerHost").innerHTML=""}
+function renderDrawer(){
+  const e=E.find(x=>x.id===S.open);if(!e){closeProject();return}
+  const al=RULES.filter(r=>e.al.includes(r.id));const ys=e.yrs||[];const maxY=Math.max(1,...ys.map(y=>y[1]));
+  const canWrite=DB&&CANW!==false;
+  const today=new Date().toISOString().slice(0,10);
+  $("#drawerHost").innerHTML=`<div class="scrim" id="scrim"></div>
+  <aside class="drawer" role="dialog" aria-modal="true" aria-label="بطاقة المشروع">
+   <div class="dhead"><h2>${esc(e.nm)}<p>${esc(e.co)} · ${esc(e.src)}${e.cno?` · عقد رقم ${esc(e.cno)}`:""}${e.cdt?` في ${esc(e.cdt)}`:""}</p></h2><button class="x" id="xb" aria-label="إغلاق">✕</button></div>
+   <div class="dbody">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><span class="pill ${stClass(e.st)}">${esc(e.st)}</span><span class="pill s-idle">${esc(e.pl)}</span>${e.dur?`<span class="pill s-idle">مدة التنفيذ ${e.dur} يوم${e.ext?` + ${e.ext} مضافة`:""}</span>`:""}</div>
+    <div class="figs">
+     <div class="fig"><div class="l">مبلغ العقد الأصلي</div><div class="v num">${fmt(e.c0)}</div></div>
+     <div class="fig hl"><div class="l">مبلغ العقد بعد التغيير</div><div class="v num">${fmt(e.c)}</div></div>
+     <div class="fig"><div class="l">الكلفة المصادقة</div><div class="v num">${e.ap?fmt(e.ap):"—"}</div></div>
+     <div class="fig hl"><div class="l">المصروف الكلي</div><div class="v num">${fmt(e.sp)}</div></div>
+     <div class="fig"><div class="l">المتبقي للدفع</div><div class="v num">${fmt(Math.max(0,e.c-e.sp))}</div></div>
+     <div class="fig"><div class="l">سلف بانتظار الصرف</div><div class="v num">${fmt(e.pend)}</div></div>
+     <div class="fig"><div class="l">نسبة الصرف</div><div class="v num">${pct(e.rate)}</div></div>
+     <div class="fig"><div class="l">الإنجاز الفني</div><div class="v" style="font-size:12.5px;font-weight:500;color:var(--muted)">يُربط لاحقاً بنظام متابعة المشاريع</div></div>
+    </div>
+    ${al.length?`<div class="card"><h2>تنبيهات هذا المشروع</h2><ul class="alist">${al.map(r=>`<li class="${r.sev==="bad"?"":r.sev}">${esc(r.t)}</li>`).join("")}</ul></div>`:""}
+    ${ys.length&&ys.some(y=>y[1])?`<div class="card"><h2>الصرف حسب السنوات</h2><div class="ylist">${ys.map(([y,v])=>`<div class="ycol"><b>${v?big(v):""}</b><i style="height:${v/maxY*100}%"></i><span>${esc(y.replace("عام ","").replace(/2013-.*-20(19|20)/,"2013–20$1"))}</span></div>`).join("")}</div></div>`:""}
+    <div class="card"><h2>تسجيل حركة مالية</h2>
+     ${!DB?`<p class="note">${DB===false?"الحفظ المشترك غير متاح في هذا العرض. سجّل الدخول إلى claude.ai لتسجيل الحركات.":"جارٍ الاتصال بقاعدة الحركات…"}</p>`:CANW===false?`<p class="note">صلاحيتك على هذه الصفحة للاطلاع فقط. اطلب من المالك صلاحية «مساهم» لتسجيل الحركات.</p>`:`
+     <form class="tx" id="txf">
+      <label>نوع الحركة<select class="inp" id="t_type">${Object.entries(TYPES).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select></label>
+      <label id="l_amt">المبلغ (د.ع)<input class="inp num" id="t_amt" type="number" step="1" inputmode="numeric" placeholder="0"></label>
+      <label id="l_st" hidden>الحالة الجديدة<select class="inp" id="t_st">${STATUS_OPTS.map(s=>`<option>${s}</option>`).join("")}</select></label>
+      <label>تاريخ الحركة<input class="inp" id="t_date" type="date" value="${today}"></label>
+      <label>رقم الكتاب أو الصك<input class="inp" id="t_ref" type="text" placeholder="مثال: 4512 في 2026/10/28"></label>
+      <label class="full">ملاحظة<input class="inp" id="t_note" type="text" placeholder="مثال: السلفة الرابعة بعد التدقيق الهندسي"></label>
+      <div class="full" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><button class="btn" type="submit" id="t_save">حفظ الحركة</button><span class="note" id="t_msg">تُحفظ باسمك وتاريخ اليوم، ويراها كل من يفتح النظام.</span></div>
+     </form>`}
+     ${e.tx.length?`<div class="tbl-wrap" style="margin-top:12px;max-height:none"><table><thead><tr><th>التاريخ</th><th>النوع</th><th class="n">المبلغ</th><th>المرجع / الملاحظة</th><th>أدخلها</th></tr></thead><tbody>
+      ${[...e.tx].sort((a,b)=>(b.at||"").localeCompare(a.at||"")).map(t=>`<tr style="cursor:default"><td class="num">${esc(t.date)}</td><td>${esc(TYPES[t.type]||t.type)}${t.newSt?` ← ${esc(t.newSt)}`:""}</td><td class="n num">${t.amt?fmt(t.amt):"—"}</td><td>${esc([t.ref,t.note].filter(Boolean).join(" · ")||"—")}</td><td>${esc(NAMES[t.by]||"مستخدم")}</td></tr>`).join("")}
+     </tbody></table></div>`:""}
+    </div>
+    <details class="card raw"><summary>جميع حقول Excel الأصلية (${e.raw.length} حقلاً)</summary>
+     <table class="rawt" style="margin-top:10px"><tbody>${e.raw.map(([k,v])=>`<tr style="cursor:default"><td>${esc(k)}</td><td>${typeof v==="number"?`<span class="num">${Math.abs(v)<=1.5&&!Number.isInteger(v)?pct(v):fmt(v)}</span>`:esc(v)}</td></tr>`).join("")}</tbody></table>
+    </details>
+   </div></aside>`;
+  $("#xb").onclick=closeProject;$("#scrim").onclick=closeProject;$("#xb").focus();
+  const f=$("#txf");if(f){
+    const sync=()=>{const s=$("#t_type").value==="status";$("#l_st").hidden=!s;$("#l_amt").hidden=s||$("#t_type").value==="note"};
+    $("#t_type").onchange=sync;sync();
+    f.onsubmit=async ev=>{ev.preventDefault();const type=$("#t_type").value,amt=Math.round(+$("#t_amt").value||0);
+      if((type==="raise"||type==="pay"||type==="change")&&!amt){$("#t_msg").textContent="أدخل المبلغ. للتصحيح استخدم مبلغاً سالباً.";$("#t_amt").focus();return}
+      if(type==="note"&&!$("#t_note").value.trim()){$("#t_msg").textContent="اكتب نص الملاحظة.";return}
+      const doc={pid:e.id,type,amt:(type==="status"||type==="note")?0:amt,date:$("#t_date").value||today,ref:$("#t_ref").value.trim(),note:$("#t_note").value.trim(),at:new Date().toISOString(),by:USER?await USER.id().catch(()=>""):""};
+      if(type==="status")doc.newSt=$("#t_st").value;
+      $("#t_save").disabled=true;$("#t_msg").textContent="جارٍ الحفظ…";
+      try{await DB.collection("txns").add(doc);toast("حُفظت الحركة في سجل المشروع")}
+      catch(err){$("#t_save").disabled=false;$("#t_msg").textContent=err&&err.code==="not_granted"?"ليست لديك صلاحية الحفظ على هذه الصفحة.":"تعذّر الحفظ. تحقق من الاتصال وأعد المحاولة."}};
+  }
+}
+
+function toast(m){const t=document.createElement("div");t.className="toast";t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+
+/* التنقل */
+const VIEWS={dash:vDash,projects:vProjects,companies:vCompanies,alerts:vAlerts,journal:vJournal};
+function cur(){const h=location.hash.slice(1);return VIEWS[h]?h:"dash"}
+function render(){const v=cur();for(const k in VIEWS)$("#v-"+k).hidden=k!==v;
+  document.querySelectorAll("#tabs a").forEach(a=>a.setAttribute("aria-current",a.getAttribute("href")==="#"+v?"page":"false"));
+  VIEWS[v]();const n=E.filter(e=>e.al.some(a=>a==="over"||a==="fasakh")).length;$("#alcnt").textContent=n||"";if(S.open)renderDrawer()}
+function go(v){if(location.hash==="#"+v)render();else location.hash=v;window.scrollTo(0,0)}
+addEventListener("hashchange",render);
+
+document.addEventListener("click",ev=>{const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],#moreb,#exp");if(!t||t.closest("aside.drawer")&&!t.matches("[data-src]"))return;
+  if(t.id==="moreb"){S.shown+=100;vProjects();return}
+  if(t.id==="exp"){exportCSV();return}
+  if(t.dataset.clr){S[t.dataset.clr]="";S.shown=60;vProjects();return}
+  if(t.dataset.src!==undefined){S.src=t.dataset.src;S.plan="";S.st="";S.shown=60;render();return}
+  if(t.dataset.id){openProject(t.dataset.id);return}
+  S.q="";S.plan="";S.st="";S.co="";S.rule="";S.shown=60;
+  if(t.dataset.plan)S.plan=t.dataset.plan;if(t.dataset.st)S.st=t.dataset.st;if(t.dataset.co)S.co=t.dataset.co;if(t.dataset.rule)S.rule=t.dataset.rule;
+  go("projects")});
+document.addEventListener("keydown",ev=>{if(ev.key==="Escape"&&S.open)closeProject();
+  if((ev.key==="Enter"||ev.key===" ")&&ev.target.matches(".bar[role=button]")){ev.preventDefault();ev.target.click()}});
+let qt;document.addEventListener("input",ev=>{const id=ev.target.id;
+  if(id==="q"){clearTimeout(qt);qt=setTimeout(()=>{S.q=ev.target.value;S.shown=60;vProjects();const q=$("#q");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
+  if(id==="cq"){clearTimeout(qt);qt=setTimeout(()=>{S.cq=ev.target.value;vCompanies();const q=$("#cq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}});
+document.addEventListener("change",ev=>{const id=ev.target.id;
+  if(id==="fplan"){S.plan=ev.target.value;S.shown=60;vProjects()}
+  if(id==="fst"){S.st=ev.target.value;S.shown=60;vProjects()}
+  if(id==="fsort"){S.sort=ev.target.value;vProjects()}});
+
+async function exportCSV(){const L=filtered();const cell=v=>{v=String(v??"");return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v};
+  const rows=[["المصدر","الحالة","الخطة","المشروع","الشركة","مبلغ العقد","العقد بعد التغيير","الكلفة المصادقة","المصروف الكلي","المتبقي","سلف بانتظار الصرف","نسبة الصرف","التنبيهات"]];
+  for(const e of L)rows.push([e.src,e.st,e.pl,e.nm,e.co,e.c0,e.c,e.ap,e.sp,Math.max(0,e.c-e.sp),e.pend,e.rate==null?"":(e.rate*100).toFixed(1)+"%",RULES.filter(r=>e.al.includes(r.id)).map(r=>r.t).join(" | ")]);
+  try{await DL.save({filename:"مشاريع-ديوان-الانبار.csv",data:"﻿"+rows.map(r=>r.map(cell).join(",")).join("\r\n")});toast("جُهّز الملف للحفظ")}
+  catch(err){if(err&&err.code!=="declined")toast("تعذّر تصدير الملف")}}
+
+/* الاتصال بالقدرات */
+recompute();render();
+(async()=>{
+  if(!window.claude||!claude.use){DB=false;$("#sync").textContent="عرض فقط";render();return}
+  const timer=setTimeout(()=>{if(DB===null){DB=false;$("#sync").textContent="الحفظ المشترك غير متاح";render()}},10000);
+  claude.use("downloads").then(d=>{DL=d;if(cur()==="projects")vProjects()}).catch(()=>{});
+  claude.use("user").then(async u=>{USER=u;if(u){try{CANW=await u.can("data.write")}catch(_){}if(S.open)renderDrawer()}}).catch(()=>{});
+  const db=await claude.use("db").catch(()=>null);
+  if(!db){clearTimeout(timer);DB=false;$("#sync").textContent="الحفظ المشترك غير متاح";render();return}
+  db.collection("txns").orderBy("at","desc").limit(1000).onSnapshot(async snap=>{
+    clearTimeout(timer);DB=db;$("#sync").textContent="متصل · "+fmt(snap.size)+" حركة";$("#sync").classList.add("on");
+    TX=snap.docs.map(d=>({_id:d.id,...d.data()})).filter(t=>t&&t.pid);
+    const ids=[...new Set(TX.map(t=>t.by).filter(Boolean))];
+    if(USER&&ids.length&&USER.profiles){try{const ps=await USER.profiles(ids);for(const i of ids)NAMES[i]=(ps[i]&&ps[i].name)||"مستخدم"}catch(_){}}
+    recompute();render()},
+    err=>{clearTimeout(timer);DB=false;$("#sync").textContent="تعذّر الاتصال بقاعدة الحركات";render()});
+})();
+</script>
