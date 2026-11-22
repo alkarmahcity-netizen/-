@@ -1280,6 +1280,7 @@ IMPORTS.projupd={title:"تحديث المشاريع والسلف من Excel",fie
    if(C.length>1&&v.co){const c2=C.filter(e=>e.ck===coKey(v.co));if(c2.length)C=c2}
    if(C.length>1&&v.cno){const c2=C.filter(e=>String(e.cno||"")===String(v.cno));if(c2.length)C=c2}
    if(C.length>1&&pref){const c2=C.filter(e=>e.src===pref);if(c2.length)C=c2}
+   let byAmt=false;if(C.length>1){const eq=(x,y)=>typeof y==="number"&&Math.abs((+x||0)-y)<=1;let c2=C.filter(e=>eq(e.c,v.c)&&eq(e.sp,v.sp));if(c2.length!==1)c2=C.filter(e=>eq(e.sp,v.sp));if(c2.length!==1)c2=C.filter(e=>eq(e.c,v.c));if(c2.length===1){C=c2;byAmt=true}}
    let seq=false;if(C.length>1&&fc[k]===C.length){C=C.filter(e=>!seen.has(e.id)).slice(0,1);seq=true}
    if(C.length>1)return {v,st:"err",m:[`الاسم يطابق ${C.length} مشاريع في النظام. أضف عمود الشركة أو رقم العقد للتمييز`]};
    if(!C.length)return o.addNew?{v,st:"new",m:[]}:{v,st:"nf",m:["لا يوجد مشروع بهذا الاسم. فعّل خيار إضافة المشاريع غير الموجودة إن كان جديداً"]};
@@ -1293,6 +1294,7 @@ IMPORTS.projupd={title:"تحديث المشاريع والسلف من Excel",fie
      if(ek==="adv"&&e.advs.some(a=>a.legacy&&a.stage!=="rejected")){if(nv!==cv)m.push("رصيد السلف لهذا المشروع يُدار من النظام (حُوّل إلى سلفة)، فلم يُحدَّث");continue}
      if(String(nv)!==String(cv))ch[ek]={from:cv,to:nv}}
    if(seq)m.push("اسم مكرر في الملف والنظام: طوبق حسب الترتيب");
+   if(byAmt)m.push("يوجد مشروعان بالاسم نفسه في النظام: طوبق مع المشروع الذي تساوي مبالغه مبالغ الملف");
    const cc=ch.c?ch.c.to:e.c,ss=ch.sp?ch.sp.to:e.sp,rr=ch.adv?ch.adv.to:(e.adv||0);
    if(ch.sp&&ch.sp.to<ch.sp.from)m.push("المصروف في الملف أقل مما في النظام");
    if(cc&&ss+rr>cc+1)m.push("المصروف مع السلف الجاهزة أكبر من مبلغ العقد");
