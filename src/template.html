@@ -236,6 +236,7 @@ details.card[open] summary{margin-bottom:12px}
   <section class="view" id="v-companies" hidden></section>
   <section class="view" id="v-journal" hidden></section>
   <section class="view" id="v-op" hidden></section>
+  <section class="view" id="v-eng" hidden></section>
   <section class="view" id="v-opx" hidden></section>
   <section class="view" id="v-emps" hidden></section>
   <section class="view" id="v-jv" hidden></section>
@@ -327,6 +328,9 @@ const RULES=[
  {id:"loanover",sev:"bad",t:"قروض مصرفية تتجاوز السلف غير المصروفة",d:"القرض القائم للمصرف أكبر من السلف غير المصروفة للمشروع، فلن تكفي دفعات السلف لتسديده.",f:p=>p.loanOut>p.pend+1},
  {id:"partial",sev:"info",t:"سلف مصروفة جزئياً",d:"صُرف جزء من السلفة ويبقى الباقي مستحقاً للشركة.",f:p=>p.advs.some(a=>a.stage==="partial")},
  {id:"loans",sev:"info",t:"مشاريع عليها قروض مصرفية قائمة",d:"الشركة اقترضت من مصرف بضمان سلفها. حوّل دفعات السلف إلى المصرف حتى يُسدَّد القرض.",f:p=>p.loanOut>0},
+ {id:"engahead",sev:"bad",t:"الصرف يسبق الإنجاز الفني",d:"نسبة الصرف في المالية أعلى من نسبة الإنجاز الفعلي في نظام الشؤون الهندسية بأكثر من 10 نقاط.",f:p=>!!p.eng&&p.eng.act>0&&p.rate!=null&&p.rate*100>p.eng.act+10},
+ {id:"engstop",sev:"warn",t:"مشروع متوقف هندسياً وعليه سلف للصرف",d:"المشروع متوقف أو مسحوب العمل في النظام الهندسي، وعليه سلف بانتظار الصرف.",f:p=>!!p.eng&&engStopped(p.eng)&&p.pend>0},
+ {id:"engc",sev:"warn",t:"مبلغ العقد يختلف عن النظام الهندسي",d:"مبلغ العقد بعد التغيير في المالية لا يساوي الكلفة الكلية (العقد مع أوامر التغيير) في النظام الهندسي.",f:p=>!!p.eng&&p.eng.total>0&&p.c>0&&Math.abs(p.eng.total-p.c)>Math.max(1000,p.c*0.001)},
  {id:"pend",sev:"info",t:"سلف بانتظار الصرف",d:"مبالغ سلف مستحقة لم تُصرف بعد (رصيد Excel مع السلف المرفوعة في النظام).",f:p=>p.pend>0},
  {id:"nost",sev:"info",t:"حالة المشروع غير محددة",d:"لا توجد حالة مسجلة. يمكن تحديدها من «تعديل بيانات المشروع».",f:p=>p.st==="غير محددة"},
  {id:"noc",sev:"info",t:"مبلغ العقد غير مدخل",d:"لا يوجد مبلغ عقد، فلا يمكن حساب نسبة الصرف ولا قبول سلف.",f:p=>!p.c},
@@ -375,6 +379,7 @@ function recompute(){
     e.k=norm(e.nm+" "+e.co+" "+(e.cno||""));e.ck=coKey(e.co);return e});
   EM=Object.fromEntries(E.map(e=>[e.id,e]));
   ALLOC=allocAgg();
+  engAttach();
   SOURCES=["الكل",...new Set(E.map(p=>p.src))];
 }
 const inSrc=e=>S.src==="الكل"||e.src===S.src;
@@ -508,7 +513,7 @@ function actCell(a){
   if(S.act&&S.act.id===a._id){const k=S.act.kind;
     if(k==="pay"){const g=+a.gross||0,rem=remOf(a),e=EM[a.pid]||{};const L=(e.loans||[]).filter(l=>l.st==="active"&&(!l.advId||l.advId===a._id));const self=selfPay(a);
       return `<div class="iact" data-noopen="1" data-gross="${g}" data-rem="${rem}">
-       <span class="pco">مبلغ السلفة ${fmt(g)} · المصروف منها ${fmt(g-rem)} (${pct(g?(g-rem)/g:0)}) · المتبقي ${fmt(rem)}</span>
+       <span class="pco">مبلغ السلفة ${fmt(g)} · المصروف منها ${fmt(g-rem)} (${pct(g?(g-rem)/g:0)}) · المتبقي ${fmt(rem)}</span>${engPayNote(e)}
        <label class="pco">نسبة الدفعة من مبلغ السلفة (%)<input class="inp num" id="ip_pct" type="number" step="0.01" min="0" max="100" value="${g?+(rem/g*100).toFixed(2):""}"></label>
        <label class="pco">مبلغ الدفعة (د.ع)<input class="inp num" id="ip_amt" type="text" inputmode="numeric" value="${fmt(rem)}"></label>
        <label class="pco">تاريخ الصرف<input class="inp" id="ip_date" type="date" value="${today()}"></label>
@@ -1245,9 +1250,9 @@ function opExport(X,wb,kind){const d=today();
   return null}
 
 /* المجموعات والتنقل */
-const GROUPS={inv:{t:"الموازنة الاستثمارية",v:["dash","projects","advances","allocs","guar","alerts","companies"]},op:{t:"الموازنة التشغيلية",v:["op","opx","emps"]},acc:{t:"المحاسبة",v:["jv","ledger","tb","coa"]}};
+const GROUPS={inv:{t:"الموازنة الاستثمارية",v:["dash","projects","advances","allocs","guar","alerts","companies","eng"]},op:{t:"الموازنة التشغيلية",v:["op","opx","emps"]},acc:{t:"المحاسبة",v:["jv","ledger","tb","coa"]}};
 const COMMON=["reports","journal"];
-const TABN={dash:"لوحة القيادة",projects:"المشاريع",advances:"السلف",allocs:"التخصيصات",guar:"خطابات الضمان",alerts:"الإنذار المبكر",companies:"الشركات",op:"الأبواب والتخصيصات",opx:"مستندات الصرف",emps:"سجل الموظفين",jv:"القيود اليومية",ledger:"دفتر الأستاذ",tb:"ميزان المراجعة",coa:"دليل الحسابات",reports:"التقارير",journal:"سجل الحركات"};
+const TABN={dash:"لوحة القيادة",projects:"المشاريع",advances:"السلف",allocs:"التخصيصات",guar:"خطابات الضمان",alerts:"الإنذار المبكر",companies:"الشركات",eng:"الربط الهندسي",op:"الأبواب والتخصيصات",opx:"مستندات الصرف",emps:"سجل الموظفين",jv:"القيود اليومية",ledger:"دفتر الأستاذ",tb:"ميزان المراجعة",coa:"دليل الحسابات",reports:"التقارير",journal:"سجل الحركات"};
 function renderNav(v){for(const [g,o] of Object.entries(GROUPS))if(o.v.includes(v))S.grp=g;if(!S.grp)S.grp="inv";
   const cnt={advances:ADV.filter(a=>["raised","audited","ready","partial"].includes(a.stage)).length,guar:GU.filter(g=>g.st==="active"&&daysTo(g.exp)<=30).length,allocs:Object.values(ALLOC).filter(r=>r.yr===CUR_YEAR&&r.avail<0).length,alerts:E.filter(e=>e.al.some(a=>a==="over"||a==="fasakh"||a==="commit")).length,op:opAgg(CUR_YEAR).filter(r=>r.avail<0).length};
   $("#groups").innerHTML=Object.entries(GROUPS).map(([g,o])=>`<button class="grp" data-grp="${g}" aria-pressed="${g===S.grp}">${o.t}</button>`).join("");
@@ -1325,6 +1330,79 @@ function readyReport(X,wb,pctv){const hdr=["ت","اسم المشروع","اسم 
     for(const e of L){const rem=Math.max(0,e.c-e.sp-e.pend);const p=Math.round(e.pend*pctv/100);aoa.push([++n,e.nm,e.co,e.c,e.c?e.sp/e.c:"",e.sp,e.pend,rem,p]);T[0]+=e.c;T[1]+=e.sp;T[2]+=e.pend;T[3]+=rem;T[4]+=p}}
   aoa.push(["","المجموع","",T[0],T[0]?T[1]/T[0]:"",T[1],T[2],T[3],T[4]]);
   X.utils.book_append_sheet(wb,sheetFrom(X,aoa,{total:1}),"السلف الجاهزة للصرف");return n}
+
+/* ===== الربط مع نظام الشؤون الهندسية الموحد ===== */
+let ENG=null,ENGM={};
+const engNum=v=>{if(v===""||v==null)return null;const n=typeof v==="number"?v:toNum(String(v).replace(/[%\s]/g,""));return isFinite(n)?n:null};
+const engDig=v=>(String(v??"").match(/\d+/)||[""])[0].replace(/^0+/,"");
+function engLoad(){try{if(window.ANBAR_DESKTOP&&window.ANBAR_DESKTOP.engRead){const r=window.ANBAR_DESKTOP.engRead();ENG=r&&r.ok?r:{ok:false,tried:r&&r.tried||[]};return}}catch(_){}
+  try{const t=localStorage.getItem("engcache");if(t){const r=JSON.parse(t);if(r&&r.projects)ENG=r}}catch(_){}}
+function engMatch(){ENGM={};if(!ENG||!ENG.ok||!Array.isArray(ENG.projects))return;const P=ENG.projects;
+  const byFile=new Map(P.map(p=>[String(p.fileNo),p]));const inv={};for(const [fn,fid] of Object.entries(ENG.finLinks||{}))if(fid)inv[fid]=fn;
+  const byKey={};for(const p of P){const k=puKey(p.name);if(k)(byKey[k]=byKey[k]||[]).push(p)}
+  for(const e of E){let p=null,how="";
+    if(inv[e.id]&&byFile.has(String(inv[e.id]))){p=byFile.get(String(inv[e.id]));how="ربط مثبّت في النظام الهندسي"}
+    if(!p){let C=byKey[puKey(e.nm)]||[];
+      if(C.length>1&&e.cno){const c2=C.filter(q=>engDig(q.contractNo)===engDig(e.cno));if(c2.length)C=c2}
+      if(C.length>1){const c2=C.filter(q=>coKey(q.contractor)===e.ck);if(c2.length)C=c2}
+      if(C.length>1){const c2=C.filter(q=>Math.abs((+q.total||((+q.orig||0)+(+q.changeCost||0)))-e.c)<=1);if(c2.length===1)C=c2}
+      if(C.length===1){p=C[0];how=e.cno&&engDig(p.contractNo)===engDig(e.cno)?"بالاسم ورقم العقد":"بالاسم"}}
+    if(p)ENGM[e.id]={p,how}}
+  /* مشروع هندسي واحد لمشروع مالي واحد: عند التكرار يُبقى الربط المثبّت، ثم المطابق برقم العقد، ثم المطابق بالمبلغ، وإلا لا يُربط أي منهما */
+  const byFn={};for(const [id,m] of Object.entries(ENGM))(byFn[m.p.fileNo]=byFn[m.p.fileNo]||[]).push(id);
+  for(const ids of Object.values(byFn)){if(ids.length<2)continue;const p=ENGM[ids[0]].p;const tot=+p.total||((+p.orig||0)+(+p.changeCost||0));
+    let keep=ids.filter(id=>/مثبّت/.test(ENGM[id].how));if(keep.length!==1)keep=ids.filter(id=>EM[id]&&EM[id].cno&&engDig(EM[id].cno)===engDig(p.contractNo));
+    if(keep.length!==1)keep=ids.filter(id=>EM[id]&&Math.abs(EM[id].c-tot)<=1);
+    for(const id of ids)if(keep.length!==1||id!==keep[0])delete ENGM[id]}}
+function engInfo(id){const m=ENGM[id];if(!m)return null;const p=m.p,L=(ENG.links||{})[p.fileNo]||{};const tot=engNum(p.total)||((engNum(p.orig)||0)+(engNum(p.changeCost)||0))||null;
+  return {fileNo:p.fileNo,how:m.how,name:p.name,contractor:p.contractor,contractNo:p.contractNo,act:engNum(p.actualPct),plan:engNum(p.planPct),status:p.status||"",start:p.start||"",planEnd:p.planEnd||"",actualEnd:p.actualEnd||"",
+    dur:engNum(p.dur),extra:engNum(p.extra),orig:engNum(p.orig),changeCost:engNum(p.changeCost),total:tot,appr:engNum(p.approvedCost),advRaised:engNum(p.advRaised),advPaid:engNum(p.advPaid),
+    co:L.co?{orders:+L.co.orders||0,net:+L.co.changeCost||0}:null,du:L.du?{status:L.du.status||"",label:L.du.label||L.du.statusLabel||""}:null,ad:L.ad?{count:+L.ad.count||0,cum:+L.ad.cumulative||0}:null,ac:L.ac&&L.ac.records?{n:L.ac.records.length}:null}}
+function engAttach(){engMatch();for(const e of E){e.eng=engInfo(e.id);e.al=RULES.filter(r=>r.f(e)).map(r=>r.id)}}
+const engStopped=x=>!!x&&(x.du&&x.du.status==="stop"||/متوقف|^توقف|سحب العمل|مسحوب/.test(x.status||""));
+function engFig(e){const x=e.eng;if(!x)return `<div class="fig"><div class="l">الإنجاز الفني</div><div class="v" style="font-size:12.5px;font-weight:500;color:var(--muted)">${ENG&&ENG.ok?"غير مربوط بمشروع في النظام الهندسي":"لم يُقرأ ملف النظام الهندسي"}</div></div>`;
+  const gap=x.act!=null&&e.rate!=null?e.rate*100-x.act:null;
+  return `<div class="fig ${gap!=null&&gap>10?"":"hl"}"><div class="l">الإنجاز الفني الفعلي</div><div class="v num" style="${gap!=null&&gap>10?"color:var(--bad)":""}">${x.act!=null?x.act.toFixed(1)+"%":"—"}</div>${x.plan!=null?`<div class="pco">المخطط ${x.plan.toFixed(1)}%</div>`:""}</div>`}
+function engPayNote(e){const x=e&&e.eng;if(!x||x.act==null)return "";const r=e.rate!=null?e.rate*100:0;
+  return `<span class="pco">الإنجاز الفني (اضبارة ${esc(x.fileNo)}): ${x.act.toFixed(1)}% · نسبة الصرف الحالية ${r.toFixed(1)}%</span>${r>x.act+10?`<span class="warnx">الصرف يسبق الإنجاز الفني بأكثر من 10 نقاط. راجع القسم الهندسي قبل الصرف.</span>`:""}${engStopped(x)?`<span class="warnx">المشروع متوقف في النظام الهندسي.</span>`:""}`}
+function engCard(e){const x=e.eng;if(!x)return "";const d=v=>v?esc(String(v).slice(0,10)):"—";const fp=e.rate!=null?e.rate*100:null;
+  const bar=(v,c)=>`<div class="track" style="margin-top:4px"><i style="width:${Math.min(100,Math.max(0,v||0))}%;${c?`background:${c}`:""}"></i></div>`;
+  return `<div class="card"><h2>من نظام الشؤون الهندسية <small>اضبارة ${esc(x.fileNo)} · ${esc(x.how)}</small></h2>
+   <div class="grid2" style="gap:10px"><div><div class="bar"><div class="t"><b>الإنجاز الفعلي (هندسي)</b><span class="num">${x.act!=null?x.act.toFixed(1)+"%":"—"}</span></div>${bar(x.act)}</div>
+     <div class="bar" style="margin-top:8px"><div class="t"><b>نسبة الصرف (مالي)</b><span class="num">${fp!=null?fp.toFixed(1)+"%":"—"}</span></div>${bar(fp,fp!=null&&x.act!=null&&fp>x.act+10?"var(--bad)":"var(--gold)")}</div>
+     ${x.plan!=null?`<div class="bar" style="margin-top:8px"><div class="t"><b>الإنجاز المخطط</b><span class="num">${x.plan.toFixed(1)}%</span></div>${bar(x.plan,"var(--idle)")}</div>`:""}</div>
+    <div class="figs" style="grid-template-columns:repeat(auto-fit,minmax(130px,1fr))">
+     <div class="fig"><div class="l">الحالة الهندسية</div><div class="v" style="font-size:13px">${esc(x.status||"—")}${x.du&&x.du.status==="stop"?' <span class="pill s-bad">متوقف</span>':""}</div></div>
+     <div class="fig"><div class="l">تاريخ الإنجاز المخطط</div><div class="v num" style="font-size:13px">${d(x.planEnd)}</div></div>
+     <div class="fig"><div class="l">المدد الإضافية</div><div class="v num" style="font-size:13px">${x.extra?fmt(x.extra)+" يوم":"—"}</div></div>
+     <div class="fig"><div class="l">أوامر التغيير</div><div class="v num" style="font-size:13px">${x.co?`${x.co.orders} · ${fmt(x.co.net)}`:x.changeCost?fmt(x.changeCost):"—"}</div></div>
+     <div class="fig"><div class="l">الكلفة الكلية (هندسي)</div><div class="v num" style="font-size:13px;${x.total&&Math.abs(x.total-e.c)>Math.max(1000,e.c*0.001)?"color:var(--warn)":""}">${x.total?fmt(x.total):"—"}</div></div>
+     <div class="fig"><div class="l">السلف المدققة (لجنة التدقيق)</div><div class="v num" style="font-size:13px">${x.ad?`${x.ad.count} · ${fmt(x.ad.cum)}`:x.advRaised?fmt(x.advRaised):"—"}</div></div>
+    </div></div></div>`}
+function vEng(){const desk=!!(window.ANBAR_DESKTOP&&window.ANBAR_DESKTOP.engRead);const L=E.filter(e=>e.eng);const pinned=L.filter(e=>/مثبّت/.test(e.eng.how)).length;
+  const cnt=id=>E.filter(e=>e.al.includes(id)).length;
+  const G=L.filter(e=>e.eng.act!=null&&e.rate!=null).map(e=>({e,gap:e.rate*100-e.eng.act})).sort((a,b)=>b.gap-a.gap).slice(0,60);
+  $("#v-eng").innerHTML=`<div class="vhead"><h2>الربط مع نظام الشؤون الهندسية الموحد</h2></div>
+  <div class="card"><h2>ملف الموقف الهندسي</h2>
+   ${ENG&&ENG.ok?`<p class="note">الملف: <b class="num">${esc(ENG.file||"")}</b> · آخر تعديل ${esc(new Date(ENG.mtime||Date.now()).toLocaleString("en-GB"))} · ${fmt(ENG.projects.length)} مشروعاً هندسياً.</p>
+     <p class="note" style="margin-top:6px">مربوط منها بمشاريع المالية: <b class="num">${fmt(L.length)}</b> مشروعاً (${fmt(pinned)} بربط مثبّت في النظام الهندسي، والباقي بالاسم ورقم العقد).</p>`
+   :`<p class="note">${desk?"لم يُعثر على ملف الموقف الهندسي (registry.json) على هذه الحاسبة.":"لم يُقرأ ملف الموقف الهندسي بعد."}</p>`}
+   ${desk?`<p class="note" style="margin-top:6px">يُقرأ تلقائياً من <span class="num">%LOCALAPPDATA%\\AnbarProjects\\registry.json</span> على الحاسبة التي يعمل عليها النظام الهندسي، ويتحدث كل 30 ثانية. لاختيار ملف آخر (مثلاً على مجلد مشترك): ملف ← اختيار ملف الموقف الهندسي.</p>`
+   :`<div class="filters" style="margin-top:8px"><label class="note" for="engfile">اختر ملف registry.json من مجلد <span class="num">%LOCALAPPDATA%\\AnbarProjects</span> في حاسبة النظام الهندسي</label><input class="inp" type="file" id="engfile" accept=".json"></div>`}</div>
+  ${ENG&&ENG.ok?`<div class="kpis"><button class="kpi" data-rule="engahead"><span class="l"><span class="pill s-bad">الصرف يسبق الإنجاز</span></span><span class="v num">${fmt(cnt("engahead"))}</span><span class="s">نسبة الصرف أعلى من الإنجاز الفعلي بأكثر من 10 نقاط</span></button>
+   <button class="kpi" data-rule="engstop"><span class="l"><span class="pill s-warn">متوقف وعليه سلف</span></span><span class="v num">${fmt(cnt("engstop"))}</span><span class="s">متوقف هندسياً وعليه سلف بانتظار الصرف</span></button>
+   <button class="kpi" data-rule="engc"><span class="l"><span class="pill s-warn">مبلغ العقد مختلف</span></span><span class="v num">${fmt(cnt("engc"))}</span><span class="s">العقد في المالية لا يساوي الكلفة الكلية في الهندسي</span></button></div>
+  ${G.length?`<div class="card"><h2>المقارنة بين الصرف والإنجاز <small>الأكبر فرقاً أولاً</small></h2><div class="tbl-wrap cards"><table><thead><tr><th>المشروع</th><th>الاضبارة</th><th class="n">الإنجاز الفعلي</th><th class="n">نسبة الصرف</th><th class="n">الفرق</th><th>الحالة الهندسية</th></tr></thead><tbody>
+   ${G.map(({e,gap})=>`<tr data-id="${e.id}"><td class="wide"><div class="pname">${esc(e.nm)}</div><div class="pco">${esc(e.co)}</div></td><td data-l="الاضبارة"><span class="num">${esc(e.eng.fileNo)}</span></td><td class="n" data-l="الإنجاز الفعلي"><span class="num">${e.eng.act.toFixed(1)}%</span></td><td class="n" data-l="نسبة الصرف"><span class="num">${(e.rate*100).toFixed(1)}%</span></td><td class="n" data-l="الفرق"><b class="num" style="${gap>10?"color:var(--bad)":""}">${gap>0?"+":""}${gap.toFixed(1)}</b></td><td data-l="الحالة الهندسية">${esc(e.eng.status||"—")}</td></tr>`).join("")}</tbody></table></div></div>`:""}`:""}
+  <div class="card"><h2>كيف يعمل الربط</h2><div class="note" style="display:grid;gap:6px">
+   <div><b>من المالية إلى الهندسي:</b> يقرأ النظام الهندسي ملف بيانات المالية <span class="num">anbar-data.json</span> (نسخة ويندوز)، أو ملف «الموقف الشامل» من التقارير. صار الملف يحمل رقم العقد ورقم الاضبارة والسلف المرفوعة والمصروفة لربط أدق.</div>
+   <div><b>من الهندسي إلى المالية:</b> يقرأ هذا البرنامج ملف الموقف الهندسي، فيظهر الإنجاز الفعلي والمدد وأوامر التغيير والسلف المدققة في بطاقة كل مشروع، وتعمل تنبيهات: الصرف يسبق الإنجاز، ومشروع متوقف عليه سلف، واختلاف مبلغ العقد.</div>
+   <div><b>المطابقة:</b> أولاً بالربط الذي ثبّته المستخدم في نافذة «💰 ربط المالية» في النظام الهندسي، ثم بالاسم ورقم العقد والشركة.</div></div></div>`}
+async function engUpload(f){try{const d=JSON.parse(await f.text());if(!d||!Array.isArray(d.projects))throw new Error("x");
+  ENG={ok:true,file:f.name,mtime:f.lastModified||Date.now(),projects:d.projects,links:d.links||{},finLinks:{}};
+  try{localStorage.setItem("engcache",JSON.stringify(ENG))}catch(_){}
+  logA("قراءة ملف الموقف الهندسي",{label:"الربط الهندسي",d:`${f.name} · ${d.projects.length} مشروعاً`});refreshAll();toast("قُرئ ملف الموقف الهندسي")}
+  catch(_){toast("الملف ليس ملف الموقف الهندسي (registry.json)")}}
 
 /* التقارير */
 function vReports(){
@@ -1433,10 +1511,11 @@ function drProject(){
      <div class="fig"><div class="l">المتبقي للدفع</div><div class="v num">${fmt(Math.max(0,e.c-e.sp))}</div></div>
      <div class="fig"><div class="l">سلف بانتظار الصرف</div><div class="v num">${fmt(e.pend)}</div></div>
      <div class="fig"><div class="l">نسبة الصرف</div><div class="v num">${pct(e.rate)}</div></div>
-     <div class="fig"><div class="l">الإنجاز الفني</div><div class="v" style="font-size:12.5px;font-weight:500;color:var(--muted)">يُربط لاحقاً بنظام متابعة المشاريع</div></div>
+     ${engFig(e)}
     </div>
     ${al.length?`<div class="card"><h2>تنبيهات هذا المشروع</h2><ul class="alist">${al.map(r=>`<li class="${r.sev==="bad"?"":r.sev}">${esc(r.t)}</li>`).join("")}</ul></div>`:""}
 
+    ${engCard(e)}
     <div class="card"><h2>السلف <small>${e.baseAdvN?`سُجّلت ${e.baseAdvN} سلفة في ملف Excel`:""}</small></h2>
      ${e.advs.length?`<div class="tbl-wrap cards" style="max-height:none"><table><thead><tr><th>ت</th><th>السلفة</th><th class="n">الإجمالي</th><th class="n">الصافي</th><th>المرحلة</th><th>الإجراء</th></tr></thead><tbody>${advRows(e.advs,"dr")}</tbody></table></div>`:`<p class="note">لا توجد سلف مسجلة في النظام لهذا المشروع.</p>`}
      ${e.legacyLeft>0?`<div class="netbox" style="margin-top:10px"><span>رصيد سلف غير مصروفة من ملف Excel</span><b class="num">${fmt(e.legacyLeft)}</b>${canWrite()?`<button class="btn ghost sm" data-legacy="${e.id}">تحويله إلى سلفة جاهزة للصرف</button>`:`<span class="pco">لصرف جزء منه حوّله إلى سلفة بعد فتح التعديل</span>`}</div>`:""}
@@ -1666,7 +1745,7 @@ function totalRow(hdr,rows,label="المجموع"){const t=hdr.map(()=>"");t[0]=
   hdr.forEach((h,j)=>{if(isPctH(h)&&/المالي/.test(h)){const cj=hdr.indexOf("مبلغ العقد بعد التغيير"),sj=hdr.indexOf("مجموع المصروف الكلي");if(cj>=0&&sj>=0&&t[cj])t[j]=t[sj]/t[cj]}});return t}
 function newWB(XLSX){const wb=XLSX.utils.book_new();wb.Workbook={Views:[{RTL:true}]};return wb}
 function mainSheet(XLSX,list,withSrc){const hdr=[...META.main.hdr];const rows=list.map((e,i)=>mainRow(e,i+1));
-  if(withSrc){hdr.push("المصدر");rows.forEach((r,i)=>r.push(list[i].src))}
+  if(withSrc){hdr.push("المصدر","رقم العقد","رقم الاضبارة","رمز المشروع في المالية","السلف المرفوعة","السلف المصروفة","الإنجاز الفعلي في النظام الهندسي %");rows.forEach((r,i)=>{const e=list[i];r.push(e.src,e.cno??"",e.eng?e.eng.fileNo:"",e.id,e.sp+e.pend,e.sp,e.eng&&e.eng.act!=null?e.eng.act:"")})}
   return sheetFrom(XLSX,[hdr,...rows,totalRow(hdr,rows)],{total:1})}
 function xSheet(XLSX,name,list){const m=META.x[name];const hdr=m.hdr;const rows=list.map((e,i)=>xRow(e,i+1,hdr));
   const aoa=[hdr.map(()=>""),hdr,[m.title,...hdr.slice(1).map(()=>"")],...rows,totalRow(hdr,rows)];
@@ -1716,7 +1795,7 @@ async function exportXL(kind){
   catch(err){if(err&&err.code!=="declined")toast("تعذّر حفظ الملف")}}
 
 /* التنقل */
-const VIEWS={op:vOp,opx:vOpx,emps:vEmps,jv:vJv,ledger:vLedger,tb:vTb,coa:vCoa,dash:vDash,projects:vProjects,advances:vAdvances,allocs:vAllocs,guar:vGuar,reports:vReports,alerts:vAlerts,companies:vCompanies,journal:vJournal};
+const VIEWS={eng:vEng,op:vOp,opx:vOpx,emps:vEmps,jv:vJv,ledger:vLedger,tb:vTb,coa:vCoa,dash:vDash,projects:vProjects,advances:vAdvances,allocs:vAllocs,guar:vGuar,reports:vReports,alerts:vAlerts,companies:vCompanies,journal:vJournal};
 function cur(){const h=location.hash.slice(1);return VIEWS[h]?h:"dash"}
 function render(){renderLock();const v=cur();const ae=document.activeElement;const keep=ae&&ae.id&&!ae.closest("aside")?{id:ae.id,s:ae.selectionStart}:null;
   for(const k in VIEWS)$("#v-"+k).hidden=k!==v;
@@ -1797,6 +1876,7 @@ let qt;document.addEventListener("input",ev=>{const id=ev.target.id;
   if(id==="gq"){clearTimeout(qt);qt=setTimeout(()=>{S.gq=ev.target.value;vGuar();const q=$("#gq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="aq"){clearTimeout(qt);qt=setTimeout(()=>{S.aq=ev.target.value;vAdvances();const q=$("#aq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}});
 document.addEventListener("change",ev=>{const id=ev.target.id;
+  if(id==="engfile"&&ev.target.files&&ev.target.files[0])engUpload(ev.target.files[0]);
   if(id==="rpct"){S.rpct=Math.min(100,Math.max(1,+ev.target.value||20))}
   if(id==="xcode"){S.xcode=ev.target.value;vOpx()}
   if(id==="edept"){S.edept=ev.target.value;vEmps()}
@@ -1809,7 +1889,8 @@ document.addEventListener("change",ev=>{const id=ev.target.id;
   if(id==="fsort"){S.sort=ev.target.value;vProjects()}});
 
 /* الاتصال بالقدرات */
-recompute();render();
+engLoad();recompute();render();
+setInterval(()=>{try{if(window.ANBAR_DESKTOP&&window.ANBAR_DESKTOP.engStamp){const s=window.ANBAR_DESKTOP.engStamp();if(s!==(ENG&&ENG.ok?ENG.mtime:null)){engLoad();refreshAll()}}}catch(_){}},30000);
 (async()=>{
   const sync=$("#sync");
   if(!window.claude||!claude.use){DB=false;sync.textContent="عرض فقط";render();return}

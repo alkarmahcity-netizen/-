@@ -105,4 +105,18 @@ const caps = {
   },
 };
 window.claude = { use: async (n) => caps[n] || null };
-window.ANBAR_DESKTOP = { dataFile: FILE };
+/* ملف الموقف المشترك لنظام الشؤون الهندسية الموحد: قراءة فقط */
+const CFG0 = ipcRenderer.sendSync("cfg");
+function engCands() { const c = []; if (CFG0.engFile) c.push(CFG0.engFile);
+  const la = process.env.LOCALAPPDATA || path.join(os.homedir(), ".local", "share"); c.push(path.join(la, "AnbarProjects", "registry.json")); return c; }
+function engPrefs() { const ap = process.env.APPDATA || path.join(os.homedir(), ".config"); const out = [];
+  for (const n of ["نظام الشؤون الهندسية الموحد", "anbar-unified"]) out.push(path.join(ap, n, "data", "prefs.json"), path.join(ap, n, "prefs.json"));
+  if (CFG0.engFile) out.push(path.join(path.dirname(CFG0.engFile), "prefs.json")); return out; }
+function engFile() { for (const f of engCands()) { try { if (fs.statSync(f).isFile()) return f; } catch (_) {} } return null; }
+function engStamp() { const f = engFile(); if (!f) return null; try { return fs.statSync(f).mtimeMs; } catch (_) { return null; } }
+function engRead() { const f = engFile(); if (!f) return { ok: false, tried: engCands() };
+  try { const st = fs.statSync(f); const d = JSON.parse(fs.readFileSync(f, "utf8")); let fl = {};
+    for (const pf of engPrefs()) { try { const x = JSON.parse(fs.readFileSync(pf, "utf8")); if (x && x.financeLinks) { fl = x.financeLinks; break; } } catch (_) {} }
+    return { ok: true, file: f, mtime: st.mtimeMs, projects: Array.isArray(d.projects) ? d.projects : [], links: d.links || {}, finLinks: fl };
+  } catch (e) { return { ok: false, file: f, error: String(e && e.message || e), tried: engCands() }; } }
+window.ANBAR_DESKTOP = { dataFile: FILE, engRead, engStamp };

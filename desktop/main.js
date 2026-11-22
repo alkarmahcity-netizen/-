@@ -20,7 +20,7 @@ let win;
 if (!app.requestSingleInstanceLock()) app.quit();
 app.on("second-instance", () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
 
-ipcMain.on("cfg", (e) => { e.returnValue = { dataFile: dataFile() }; });
+ipcMain.on("cfg", (e) => { e.returnValue = { dataFile: dataFile(), engFile: readCfg().engFile || "" }; });
 
 ipcMain.handle("save", async (_e, { filename, data }) => {
   const r = await dialog.showSaveDialog(win, {
@@ -60,6 +60,10 @@ function buildMenu() {
       submenu: [
         { label: "تغيير مكان ملف البيانات…", click: chooseDataFolder },
         { label: "فتح مجلد البيانات", click: () => shell.showItemInFolder(dataFile()) },
+        { label: "اختيار ملف الموقف الهندسي (registry.json)…", click: async () => {
+            const r = await dialog.showOpenDialog(win, { title: "ملف الموقف المشترك لنظام الشؤون الهندسية الموحد", properties: ["openFile"], filters: [{ name: "JSON", extensions: ["json"] }] });
+            if (r.canceled || !r.filePaths[0]) return; writeCfg({ ...readCfg(), engFile: r.filePaths[0] }); win.reload(); } },
+        { label: "إلغاء اختيار ملف الموقف الهندسي (العودة للمكان الافتراضي)", click: () => { const c = readCfg(); delete c.engFile; writeCfg(c); win.reload(); } },
         { label: "نسخة احتياطية الآن…", click: async () => {
             const r = await dialog.showSaveDialog(win, { defaultPath: path.join(app.getPath("documents"), "anbar-backup-" + new Date().toISOString().slice(0, 10) + ".json") });
             if (!r.canceled && r.filePath && fs.existsSync(dataFile())) { fs.copyFileSync(dataFile(), r.filePath); shell.showItemInFolder(r.filePath); }
