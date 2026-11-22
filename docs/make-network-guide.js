@@ -30,7 +30,7 @@ const body=[
  T([["المكوّن","حاسبة القسم الهندسي","حاسبة القسم المالي"],
     ["البرنامج","نظام الشؤون الهندسية الموحد","برنامج الشؤون المالية (AnbarFinance، نسخة ويندوز)"],
     ["الملف الذي يُشارَك",[["code","registry.json"]],[["code","anbar-data.json"]]],
-    ["مكانه",[["code","%LOCALAPPDATA%\\AnbarProjects"]],[["code","المستندات\\AnbarFinance"]]],
+    ["مكانه",[["code","%LOCALAPPDATA%\\AnbarProjects"]],[["code","Documents\\AnbarFinance"]]],
     ["اسم المشاركة",[["code","AnbarProjects"]],[["code","AnbarFinance"]]],
     ["العنوان المقترح",[["code","192.168.1.50"]],[["code","192.168.1.60"]]]],[0.22,0.39,0.39]),
  sp(),
