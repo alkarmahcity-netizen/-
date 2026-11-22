@@ -464,7 +464,7 @@ function vProjects(){
   const C=L.reduce((s,e)=>s+e.c,0),SP=L.reduce((s,e)=>s+e.sp,0);
   const coN=S.co?(E.find(e=>e.ck===S.co)||{}).co:"";const rl=RULES.find(r=>r.id===S.rule);
   $("#v-projects").innerHTML=`
-  <div class="vhead"><h2>سجل المشاريع</h2><div class="acts">${canEditBase()?'<button class="btn" data-open="newProject">＋ مشروع جديد</button>':""}${DL?'<button class="btn ghost" data-xl="list">تصدير القائمة إلى Excel</button>':""}</div></div>
+  <div class="vhead"><h2>سجل المشاريع</h2><div class="acts">${canEditBase()?'<button class="btn gold" data-imp="projupd">تحديث من Excel</button><button class="btn" data-open="newProject">＋ مشروع جديد</button>':""}${DL?'<button class="btn ghost" data-xl="list">تصدير القائمة إلى Excel</button>':""}</div></div>
   ${srcBar()}
   <div class="filters">
     <input class="inp" type="search" id="q" placeholder="ابحث باسم المشروع أو الشركة أو رقم العقد…" value="${esc(S.q)}">
@@ -532,7 +532,7 @@ function vAdvances(){
   const L=A.filter(a=>(S.astage==="all"||(S.astage==="open"?["raised","audited","ready","partial"].includes(a.stage):a.stage===S.astage))&&(!q||EM[a.pid].k.includes(q))).sort((x,y)=>String(y.at).localeCompare(String(x.at)));
   const cnt=s=>A.filter(a=>a.stage===s);const v=l=>l.reduce((t,a)=>t+(+a.gross||0),0);
   $("#v-advances").innerHTML=`
-  <div class="vhead"><h2>إدارة السلف</h2><div class="acts">${canEditBase()?'<button class="btn gold" data-open="newAdv">＋ إضافة سلفة جديدة</button><button class="btn" data-open="bulkPay">صرف نسبة جماعية</button>':""}${DL?'<button class="btn ghost" data-xl="adv">تقرير السلف (Excel)</button>':""}</div></div>
+  <div class="vhead"><h2>إدارة السلف</h2><div class="acts">${canEditBase()?'<button class="btn gold" data-open="newAdv">＋ إضافة سلفة جديدة</button><button class="btn" data-open="bulkPay">صرف نسبة جماعية</button><button class="btn ghost" data-imp="projupd">تحديث السلف من Excel</button>':""}${DL?'<button class="btn ghost" data-xl="adv">تقرير السلف (Excel)</button>':""}</div></div>
   <p class="note">دورة السلفة: <span class="steps">${FLOW.filter(s=>s!=="partial").map((s,i)=>`<span class="pill ${STAGES[s].c}">${STAGES[s].t}</span>${i<FLOW.length-2?"←":""}`).join(" ")}</span> ينفذ كل مرحلة موظف مختلف، وتُسجَّل كل خطوة باسم منفذها ووقتها. يمكن صرف السلفة على دفعات بنسب مئوية، وكل دفعة تُضاف تلقائياً إلى المصروف الكلي للمشروع بتاريخها.</p>
   ${srcBar()}
   <div class="kpis k7">
@@ -1098,21 +1098,22 @@ function impLoadSheet(name){const k=S.dr.imp;const ws=IMPWB.Sheets[name];const a
 function impCheck(){const k=S.dr.imp,C=IMPORTS[k],I=S.imp;const vals=I.rows.map(r=>{const v={};for(const f of C.fields){const j=I.map[f.k];v[f.k]=j>=0?cellVal(r[j],f.t):undefined}return v});
   const miss=C.fields.filter(f=>f.req&&!(I.map[f.k]>=0));I.miss=miss.map(f=>f.l);I.res=miss.length?[]:C.check(vals)}
 async function impFile(file){const k=S.dr.imp;try{const X=await loadXLSX();const buf=await file.arrayBuffer();IMPWB=X.read(buf,{type:"array",cellDates:true});
-  S.imp={file:file.name,sheets:IMPWB.SheetNames};impLoadSheet(IMPWB.SheetNames[0]);S.dirty=false;renderDrawer()}catch(err){toast("تعذّرت قراءة الملف. تأكد أنه ملف Excel صالح.")}}
-const IST={new:["جديد","s-done"],neww:["جديد مع تنبيه","s-warn"],upd:["تحديث","s-info"],updw:["تحديث مع تنبيه","s-warn"],same:["بلا تغيير","s-idle"],err:["خطأ","s-bad"]};
-function drImport(){const k=S.dr.imp,C=IMPORTS[k],I=S.imp||{};const R=I.res||[];const c=s=>R.filter(r=>r.st===s).length;const ok=R.filter(r=>r.st!=="err"&&r.st!=="same");
+  S.imp={file:file.name,sheets:IMPWB.SheetNames};if(k==="projupd"){const m=file.name.match(/(\d{1,2})[-_.](\d{1,2})[-_.](\d{4})/);S.imp.opts={date:m?`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`:today(),addNew:false,src:/منافذ/.test(file.name)?"ملف منافذ حدودية":/استقرار/.test(file.name)?"ملف اعادة الاستقرار":SRC_MAIN,pl:""}}impLoadSheet(IMPWB.SheetNames[0]);S.dirty=false;renderDrawer()}catch(err){toast("تعذّرت قراءة الملف. تأكد أنه ملف Excel صالح.")}}
+const IST={new:["جديد","s-done"],neww:["جديد مع تنبيه","s-warn"],upd:["تحديث","s-info"],updw:["تحديث مع تنبيه","s-warn"],same:["بلا تغيير","s-idle"],err:["خطأ","s-bad"],nf:["غير موجود في النظام","s-warn"],skip:["سطر عنوان أو مجموع","s-idle"]};
+function drImport(){const k=S.dr.imp,C=IMPORTS[k],I=S.imp||{};const R=I.res||[];const c=s=>R.filter(r=>r.st===s).length;const ok=R.filter(r=>SAVE_ST.includes(r.st));
   const kf=C.fields.filter(f=>f.req).map(f=>f.k).concat(C.fields.find(f=>f.t==="num")?.k||[]).slice(0,4);
   $("#drawerHost").innerHTML=shell(C.title,"اقرأ الملف، راجع المطابقة والمعاينة، ثم احفظ",canWrite()?`
    <div class="card"><label class="note" for="imp_file">اختر ملف Excel (xlsx أو xls أو csv)</label><input class="inp" type="file" id="imp_file" accept=".xlsx,.xls,.xlsm,.csv" style="margin-top:6px">
     ${I.file?`<p class="note" style="margin-top:8px">الملف: <b>${esc(I.file)}</b> · الورقة: <select class="inp" id="imp_sheet" style="width:auto;display:inline-block">${I.sheets.map(s=>`<option ${s===I.sheet?"selected":""}>${esc(s)}</option>`).join("")}</select> · صف العناوين: ${I.hr+1} · عدد الصفوف: ${fmt(I.rows.length)}</p>`:`<p class="note" style="margin-top:8px">يتعرّف النظام على الأعمدة بأسمائها تلقائياً. يمكنك استخدام ملفاتكم الحالية أو القالب.</p>`}</div>
    ${I.rows?`<details class="card" ${I.miss&&I.miss.length?"open":""}><summary>مطابقة الأعمدة ${I.miss&&I.miss.length?`<span class="pill s-bad">ناقص: ${esc(I.miss.join("، "))}</span>`:'<span class="pill s-done">مكتملة</span>'}</summary>
     <div class="fm">${C.fields.map(f=>`<label>${f.l}${f.req?" (مطلوب)":""}<select class="inp" data-map="${f.k}"><option value="-1">— غير موجود —</option>${I.hdr.map((h,j)=>`<option value="${j}" ${I.map[f.k]===j?"selected":""}>${esc(h||"عمود "+(j+1))}</option>`).join("")}</select></label>`).join("")}</div></details>
-    ${R.length?`<div class="card"><h2>المعاينة</h2><div class="steps">${Object.keys(IST).filter(s=>c(s)).map(s=>`<span class="pill ${IST[s][1]}">${IST[s][0]}: ${fmt(c(s))}</span>`).join(" ")}</div>
+    ${C.opts&&I.opts?C.opts(I):""}
+    ${R.length?`<div class="card"><h2>المعاينة</h2><div class="steps">${Object.keys(IST).filter(s=>c(s)&&s!=="skip").map(s=>`<span class="pill ${IST[s][1]}">${IST[s][0]}: ${fmt(c(s))}</span>`).join(" ")}</div>
      <div class="tbl-wrap" style="margin-top:10px;max-height:50vh"><table><thead><tr><th>الصف</th><th>الحالة</th>${kf.map(f=>`<th>${esc(C.fields.find(x=>x.k===f).l)}</th>`).join("")}<th>الملاحظات والتغييرات</th></tr></thead><tbody>
-     ${R.map((r,i)=>[r,i]).filter(([r])=>r.st!=="same").slice(0,150).map(([r,i])=>`<tr><td class="num">${I.hr+2+i}</td><td><span class="pill ${IST[r.st][1]}">${IST[r.st][0]}</span></td>${kf.map(f=>`<td>${esc(typeof r.v[f]==="number"?fmt(r.v[f]):r.v[f]??"")}</td>`).join("")}<td class="chg">${esc([...(r.m||[]),...(r.diff||[])].join(" | "))}</td></tr>`).join("")}
-     </tbody></table></div>${R.filter(r=>r.st!=="same").length>150?'<p class="note">تُعرض أول 150 صفاً.</p>':""}
+     ${R.map((r,i)=>[r,i]).filter(([r])=>r.st!=="same"&&r.st!=="skip").slice(0,150).map(([r,i])=>`<tr><td class="num">${I.hr+2+i}</td><td><span class="pill ${IST[r.st][1]}">${IST[r.st][0]}</span></td>${kf.map(f=>`<td>${esc(typeof r.v[f]==="number"?fmt(r.v[f]):r.v[f]??"")}</td>`).join("")}<td class="chg">${esc([...(r.m||[]),...(r.diff||[])].join(" | "))}</td></tr>`).join("")}
+     </tbody></table></div>${R.filter(r=>r.st!=="same"&&r.st!=="skip").length>150?'<p class="note">تُعرض أول 150 صفاً.</p>':""}
      <div class="acts" style="margin-top:12px"><button class="btn gold" id="imp_go" data-impgo="1" ${ok.length?"":"disabled"}>حفظ ${fmt(ok.length)} صفاً${c("err")?` وتجاهل ${fmt(c("err"))} صفاً فيه أخطاء`:""}</button><span class="fmsg" id="imp_msg"></span></div></div>`:""}`:""}`:wnote())}
-async function impGo(btn){const k=S.dr.imp,C=IMPORTS[k],I=S.imp;const ok=I.res.filter(r=>r.st!=="err"&&r.st!=="same");if(!ok.length)return;const msg=$("#imp_msg");
+async function impGo(btn){const k=S.dr.imp,C=IMPORTS[k],I=S.imp;const ok=I.res.filter(r=>SAVE_ST.includes(r.st));if(!ok.length)return;const msg=$("#imp_msg");
   if(!S.dr.confirm){S.dr.confirm=true;msg.className="fmsg";msg.textContent=`سيُحفظ ${ok.length} صفاً. اضغط مرة أخرى للتأكيد.`;return}
   btn.disabled=true;const bid=uid();
   try{const r=await C.commit(ok,I.file,t=>{msg.textContent=t},bid);
@@ -1240,6 +1241,7 @@ function opExport(X,wb,kind){const d=today();
   if(kind==="ledger"){const a=accList().find(x=>x.k===(S.lacc||"BANK"));const G=ledgerRows(a.k,S.lyr||CUR_YEAR);const hdr=["التاريخ","رقم القيد","المصدر","المرجع","البيان","مدين","دائن","الرصيد"];
     const rows=[["","","","","رصيد أول السنة","","",G.open],...G.rows.map(r=>[r.x.date,r.x.no,r.x.src,r.x.ref,r.x.desc,r.l.dr||"",r.l.cr||"",r.bal])];
     X.utils.book_append_sheet(wb,sheetFrom(X,[hdr,...rows]),"دفتر الأستاذ");return `دفتر الأستاذ ${a.code} ${S.lyr||CUR_YEAR}.xlsx`}
+  if(kind==="ready"){readyReport(X,wb,S.rpct||20);return `السلف الجاهزة للصرف ${d}.xlsx`}
   return null}
 
 /* المجموعات والتنقل */
@@ -1250,6 +1252,77 @@ function renderNav(v){for(const [g,o] of Object.entries(GROUPS))if(o.v.includes(
   const cnt={advances:ADV.filter(a=>["raised","audited","ready","partial"].includes(a.stage)).length,guar:GU.filter(g=>g.st==="active"&&daysTo(g.exp)<=30).length,allocs:Object.values(ALLOC).filter(r=>r.yr===CUR_YEAR&&r.avail<0).length,alerts:E.filter(e=>e.al.some(a=>a==="over"||a==="fasakh"||a==="commit")).length,op:opAgg(CUR_YEAR).filter(r=>r.avail<0).length};
   $("#groups").innerHTML=Object.entries(GROUPS).map(([g,o])=>`<button class="grp" data-grp="${g}" aria-pressed="${g===S.grp}">${o.t}</button>`).join("");
   $("#tabs").innerHTML=[...GROUPS[S.grp].v,...COMMON].map(k=>`<a href="#${k}" aria-current="${k===v?"page":"false"}">${TABN[k]}${cnt[k]?`<span class="cnt${k==="advances"?" g":""}">${cnt[k]}</span>`:""}</a>`).join("")}
+
+/* ===== تحديث المشاريع والسلف من ملف Excel ===== */
+const SAVE_ST=["new","neww","upd","updw"];
+const puKey=s=>norm(s).replace(/[^ء-ي0-9a-z]/g,"");
+const PU_L={c:"العقد بعد التغيير",c0:"العقد الأصلي",ap:"الكلفة المصادقة",sp:"المصروف الكلي",adv:"السلف الجاهزة للصرف",bank:"المستلم من المصرف",st:"الحالة",co:"الشركة",cno:"رقم العقد"};
+const PU_F=[{k:"nm",l:"اسم المشروع",req:1,syn:["اسم المشروع","المشروع"]},{k:"co",l:"اسم الشركة",syn:["اسم الشركة","الشركة","الشركة المنفذة"]},{k:"cno",l:"رقم العقد",syn:["رقم العقد"]},
+  {k:"st",l:"حالة المشروع",syn:["حالة المشروع"]},{k:"c",l:"مبلغ العقد بعد التغيير",t:"num",syn:["مبلغ العقد بعد التغيير","العقد بعد التغيير"]},
+  {k:"c0",l:"مبلغ العقد الأصلي",t:"num",syn:["الكلفة الكلية (مبلغ العقد)","الكلفة الكلية","مبلغ العقد الاصلي"]},{k:"ap",l:"الكلفة المصادقة",t:"num",syn:["الكلفة المصادقة"]},
+  {k:"sp",l:"مجموع المصروف الكلي",t:"num",req:1,syn:["مجموع المصروف الكلي","المصروف الكلي","مجموع المصروف"]},
+  {k:"ready",l:"السلف الجاهزة للصرف",t:"num",syn:["السلف الجاهزة للصرف","مبلغ السلفة (المبالغ الغير مصروفة)","السلف غير المصروفة","مبلغ السلفة"]},
+  {k:"bank",l:"المبلغ المستلم من المصرف",t:"num",syn:["المبلغ المستلم من المصرف"]}];
+IMPORTS.projupd={title:"تحديث المشاريع والسلف من Excel",fields:PU_F,
+ opts(I){const o=I.opts;return `<div class="card"><h2>خيارات التحديث</h2><div class="fm">
+   <label>تاريخ بيانات الملف<input class="inp" type="date" data-impopt="date" value="${esc(o.date)}"></label>
+   <label class="chk full"><input type="checkbox" data-impopt="addNew" ${o.addNew?"checked":""}> إضافة المشاريع غير الموجودة في النظام كمشاريع جديدة</label>
+   ${o.addNew?`<label>تُضاف إلى<select class="inp" data-impopt="src">${SRC_LIST.map(s=>`<option ${s===o.src?"selected":""}>${esc(s)}</option>`).join("")}</select></label><label>الخطة<input class="inp" data-impopt="pl" list="dl-plans" value="${esc(o.pl)}"></label>`:""}
+  </div><p class="note" style="margin-top:8px">يطابق النظام كل سطر بمشروعه حسب الاسم، ثم الشركة ورقم العقد عند التشابه. كل رقم يتغير يُسجَّل تعديلاً في سجل الحركات بالقيمة السابقة والجديدة واسم الملف وتاريخ بياناته، ويمكن التراجع عن التحديث كاملاً.</p></div>`},
+ check(rows){const o=S.imp.opts;const sheet=String(S.imp.sheet||"")+" "+String(S.imp.file||"");const srcOf=s=>/استقرار/.test(s)?"ملف اعادة الاستقرار":/منافذ/.test(s)?"ملف منافذ حدودية":"";let pref=srcOf(sheet);
+  const fc={};for(const v of rows)if(v.nm){const k=puKey(v.nm);fc[k]=(fc[k]||0)+1}
+  const by={};const PK=E.map(e=>[e,puKey(e.nm)]);for(const [e,k] of PK)(by[k]=by[k]||[]).push(e);const seen=new Set();
+  return rows.map(v=>{const name=String(v.nm||"").trim();const hasNum=["c","sp","ready","c0"].some(f=>typeof v[f]==="number"&&!isNaN(v[f]));
+   if(!name||!hasNum||/ادخل مبلغ العقد/.test(name)){if(name&&!hasNum&&srcOf(name))pref=srcOf(name);return {v,st:"skip",m:[]}}
+   for(const f of PU_F)if(f.t==="num"&&v[f.k]!==undefined&&isNaN(v[f.k]))return {v,st:"err",m:[`«${f.l}» ليس رقماً`]};
+   const k=puKey(name);let C=by[k]||[];
+   if(!C.length&&k.length>15)C=PK.filter(([e,ek])=>ek.length>15&&(ek.includes(k)||k.includes(ek))).map(x=>x[0]);
+   if(C.length>1&&v.co){const c2=C.filter(e=>e.ck===coKey(v.co));if(c2.length)C=c2}
+   if(C.length>1&&v.cno){const c2=C.filter(e=>String(e.cno||"")===String(v.cno));if(c2.length)C=c2}
+   if(C.length>1&&pref){const c2=C.filter(e=>e.src===pref);if(c2.length)C=c2}
+   let seq=false;if(C.length>1&&fc[k]===C.length){C=C.filter(e=>!seen.has(e.id)).slice(0,1);seq=true}
+   if(C.length>1)return {v,st:"err",m:[`الاسم يطابق ${C.length} مشاريع في النظام. أضف عمود الشركة أو رقم العقد للتمييز`]};
+   if(!C.length)return o.addNew?{v,st:"new",m:[]}:{v,st:"nf",m:["لا يوجد مشروع بهذا الاسم. فعّل خيار إضافة المشاريع غير الموجودة إن كان جديداً"]};
+   const e=C[0];if(seen.has(e.id))return {v,st:"err",m:["المشروع مكرر في الملف"]};seen.add(e.id);
+   const cur={c:e.c,c0:e.c0,ap:e.ap,sp:e.sp,adv:e.adv||0,bank:e.bankBase||0,st:e.st==="غير محددة"?"":e.st,co:e.co,cno:e.cno??""};
+   const mp={c:"c",c0:"c0",ap:"ap",sp:"sp",ready:"adv",bank:"bank",st:"st",co:"co",cno:"cno"};const m=[],ch={};
+   for(const [fk,ek] of Object.entries(mp)){let nv=v[fk];if(nv===undefined||nv==="")continue;if(typeof nv==="number")nv=Math.round(nv);
+     let cv=cur[ek];cv=typeof nv==="number"?Math.round(+cv||0):String(cv??"");
+     if(ek==="co"&&coKey(nv)===coKey(cv))continue;
+     if((ek==="st"||ek==="cno")&&norm(nv)===norm(cv))continue;
+     if(ek==="adv"&&e.advs.some(a=>a.legacy&&a.stage!=="rejected")){if(nv!==cv)m.push("رصيد السلف لهذا المشروع يُدار من النظام (حُوّل إلى سلفة)، فلم يُحدَّث");continue}
+     if(String(nv)!==String(cv))ch[ek]={from:cv,to:nv}}
+   if(seq)m.push("اسم مكرر في الملف والنظام: طوبق حسب الترتيب");
+   const cc=ch.c?ch.c.to:e.c,ss=ch.sp?ch.sp.to:e.sp,rr=ch.adv?ch.adv.to:(e.adv||0);
+   if(ch.sp&&ch.sp.to<ch.sp.from)m.push("المصروف في الملف أقل مما في النظام");
+   if(cc&&ss+rr>cc+1)m.push("المصروف مع السلف الجاهزة أكبر من مبلغ العقد");
+   if(e.tx.some(t=>t.type!=="edit")||e.advs.some(a=>paidOf(a)>0))m.push("للمشروع صرف مسجل في النظام: ستُعتمد أرقام الملف");
+   const diff=Object.entries(ch).map(([k2,c])=>`${PU_L[k2]}: ${typeof c.to==="number"?fmt(c.from):c.from||"—"} ← ${typeof c.to==="number"?fmt(c.to):c.to}`);
+   if(!diff.length)return {v,st:"same",m,pid:e.id};
+   return {v,st:m.length?"updw":"upd",m,diff,ch,pid:e.id}})},
+ async commit(res,file,msg,bid){const o=S.imp.opts;const by=await me();let u=0,n=0;const added=[];const note=`تحديث من ملف Excel: ${file} (بيانات ${o.date})`;
+  for(const r of res){const at=new Date().toISOString();
+   if(r.st==="new"||r.st==="neww"){const v=r.v,id=uid();const c=Math.round(v.c||v.c0||0);
+     await DB.collection("projects").doc(id).set({src:o.src||SRC_MAIN,nm:String(v.nm).trim(),co:v.co||"",pl:o.pl||"غير محددة",st:v.st||"قيد التنفيذ",cno:v.cno||"",c0:Math.round(v.c0||c),c,ap:Math.round(v.ap||0),at,by,batch:bid,fromFile:file});added.push(id);
+     const ch={};if(v.sp)ch.sp={from:0,to:Math.round(v.sp)};if(v.ready)ch.adv={from:0,to:Math.round(v.ready)};if(v.bank)ch.bank={from:0,to:Math.round(v.bank)};
+     if(Object.keys(ch).length)await DB.collection("txns").add({pid:id,type:"edit",changes:ch,amt:0,date:o.date,note,at:new Date(Date.now()+1).toISOString(),by,batch:bid});n++}
+   else{await DB.collection("txns").add({pid:r.pid,type:"edit",changes:r.ch,amt:0,date:o.date,note,at,by,batch:bid});u++}
+   msg(`جارٍ الحفظ… ${n+u} من ${res.length}`)}
+  return {counts:{upd:u,new:n},undo:{batch:bid,added}}},
+ async undo(b){const by=await me();
+  for(const t of TX.filter(x=>x.batch===b.undo.batch&&x.type==="edit"&&!(b.undo.added||[]).includes(x.pid))){const rev=Object.fromEntries(Object.entries(t.changes).map(([k,c])=>[k,{from:c.to,to:c.from}]));
+    await DB.collection("txns").add({pid:t.pid,type:"edit",changes:rev,amt:0,date:today(),note:"تراجع عن تحديث من Excel: "+(b.file||""),at:new Date().toISOString(),by})}
+  for(const id of b.undo.added||[]){const e=EM[id];if(e&&(e.advs.length||e.gs.length||e.loans.length||e.tx.some(t=>t.batch!==b.undo.batch)))throw new Error("المشروع «"+e.nm+"» عليه حركات بعد الاستيراد");
+    await DB.collection("projects").doc(id).delete()}}};
+
+/* تقرير السلف الجاهزة للصرف بصيغة الملف */
+function readyReport(X,wb,pctv){const hdr=["ت","اسم المشروع","اسم الشركة","مبلغ العقد بعد التغيير","نسبة الانجاز المالي","مجموع المصروف الكلي","السلف الجاهزة للصرف","المتبقي",`نسبة ${pctv}%`];
+  const groups=[...new Set(E.map(e=>e.src))];const aoa=[hdr];let n=0;const T=[0,0,0,0,0];
+  for(const g of groups){const L=E.filter(e=>e.src===g&&e.pend>0).sort((a,b)=>String(a.nm).localeCompare(String(b.nm),"ar"));if(!L.length)continue;
+    aoa.push(["",g.replace(/^ملف /,"شركات - ")]);
+    for(const e of L){const rem=Math.max(0,e.c-e.sp-e.pend);const p=Math.round(e.pend*pctv/100);aoa.push([++n,e.nm,e.co,e.c,e.c?e.sp/e.c:"",e.sp,e.pend,rem,p]);T[0]+=e.c;T[1]+=e.sp;T[2]+=e.pend;T[3]+=rem;T[4]+=p}}
+  aoa.push(["","المجموع","",T[0],T[0]?T[1]/T[0]:"",T[1],T[2],T[3],T[4]]);
+  X.utils.book_append_sheet(wb,sheetFrom(X,aoa,{total:1}),"السلف الجاهزة للصرف");return n}
 
 /* التقارير */
 function vReports(){
@@ -1271,6 +1344,8 @@ function vReports(){
       <button class="btn" data-xl="alloc" ${DL?"":"disabled"}>تنزيل Excel</button></div>
     <div class="card"><h3>تقرير خطابات الضمان</h3><p>كل خطاب: المشروع والشركة والمصرف والمبلغ وتاريخ النفاذ والأيام المتبقية وعدد التمديدات والحالة، مرتبة حسب أقرب انتهاء.</p>
       <button class="btn" data-xl="guar" ${DL?"":"disabled"}>تنزيل Excel</button></div>
+    <div class="card"><h3>السلف الجاهزة للصرف</h3><p>بنفس صيغة كشف السلف الجاهزة للصرف: مبلغ العقد ونسبة الإنجاز المالي والمصروف والسلف الجاهزة والمتبقي ومبلغ النسبة المقررة للصرف، مقسمة حسب الجهة مع المجموع.</p>
+      <div class="acts"><label class="note" style="display:flex;gap:6px;align-items:center">النسبة %<input class="inp num" id="rpct" type="number" min="1" max="100" value="${S.rpct||20}" style="width:90px"></label><button class="btn" data-xl="ready" ${DL?"":"disabled"}>تنزيل Excel</button></div></div>
     <div class="card"><h3>الموازنة التشغيلية</h3><p>البنود وتخصيصاتها ومصروفها ومتاحها، ومستندات الصرف بأرقامها، للسنة المختارة في تبويب الموازنة التشغيلية.</p>
       <div class="acts"><button class="btn" data-xl="opl" ${DL?"":"disabled"}>البنود والتخصيصات</button><button class="btn ghost" data-xl="opx" ${DL?"":"disabled"}>مستندات الصرف</button></div></div>
     <div class="card"><h3>سجل الموظفين</h3><p>كل الموظفين بالدرجة والمرحلة والراتب والمخصصات والاستقطاعات والصافي.</p>
@@ -1466,6 +1541,7 @@ function bindForms(){
   const coaf=$("#coaf");if(coaf)coaf.onsubmit=saveCoa;
   const imf=$("#imp_file");if(imf)imf.onchange=()=>{if(imf.files[0])impFile(imf.files[0])};
   const ims=$("#imp_sheet");if(ims)ims.onchange=()=>{impLoadSheet(ims.value);S.dirty=false;renderDrawer()};
+  document.querySelectorAll("aside.drawer [data-impopt]").forEach(x=>x.onchange=()=>{S.imp.opts[x.dataset.impopt]=x.type==="checkbox"?x.checked:x.value;impCheck();S.dr.confirm=false;S.dirty=false;renderDrawer()});
   document.querySelectorAll("aside.drawer [data-map]").forEach(s=>s.onchange=()=>{S.imp.map[s.dataset.map]=+s.value;impCheck();S.dr.confirm=false;S.dirty=false;renderDrawer()});
   const bkf=$("#bkf");if(bkf){bkf.onsubmit=doBulk;bkf.addEventListener("input",bulkPrev);bkf.addEventListener("change",bulkPrev);bulkPrev()}
   const lf=$("#alf");if(lf){lf.onsubmit=saveAlloc;["l_kind","l_pl","l_yr"].forEach(i=>{$("#"+i).addEventListener("input",allocInfo);$("#"+i).addEventListener("change",allocInfo)});allocInfo()}
@@ -1557,7 +1633,7 @@ function loadXLSX(){if(window.XLSX)return Promise.resolve(window.XLSX);if(XLSXP)
   XLSXP=new Promise((ok,no)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";s.onload=()=>ok(window.XLSX);s.onerror=()=>{XLSXP=null;no(new Error("load"))};document.head.appendChild(s)});return XLSXP}
 const rawMap=e=>Object.fromEntries(e.raw||[]);
 const isMoneyH=h=>!!h&&/التأمينات|ضريبة|استقطاعات|الصافي|الراتب|المخصصات|الاستقطاعات|مدين|دائن|الرصيد|القرض|المسدد|القائم|المصروف من|المتبقي من|مبلغ|الكلفة|المصروف|السلف|المتبقي|المستلم|جزء من|التخصيص|التعزيز|التخفيض|المناقلات|الالتزامات|المتاح/.test(h)&&!/رقم|الأيام|عدد/.test(h);
-const isPctH=h=>!!h&&/نسبة/.test(h);
+const isPctH=h=>!!h&&/نسبة/.test(h)&&!/\d+%/.test(h);
 function lastAdvNo(e){const a=e.advs.filter(x=>x.stage!=="rejected");if(!a.length){const r=rawMap(e)["رقم السلفة"];return r??""}const l=a[a.length-1];return l.final?"النهائية":l.no}
 function mainRow(e,i){const r=rawMap(e);return [i,e.st==="غير محددة"?"":e.st,e.pl,e.nm,e.co,e.c0||"",e.c||"",e.ap||"",e.c?e.sp/e.c:"",e.sp,lastAdvNo(e),e.pend||"",e.bank||"",e.sp+(e.bank||0),r["نسبة الإنجاز الفعلي"]??""]}
 function xRow(e,i,hdr){const r=rawMap(e);const row=hdr.map(h=>h&&r[h]!==undefined?r[h]:"");
@@ -1719,6 +1795,7 @@ let qt;document.addEventListener("input",ev=>{const id=ev.target.id;
   if(id==="gq"){clearTimeout(qt);qt=setTimeout(()=>{S.gq=ev.target.value;vGuar();const q=$("#gq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="aq"){clearTimeout(qt);qt=setTimeout(()=>{S.aq=ev.target.value;vAdvances();const q=$("#aq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}});
 document.addEventListener("change",ev=>{const id=ev.target.id;
+  if(id==="rpct"){S.rpct=Math.min(100,Math.max(1,+ev.target.value||20))}
   if(id==="xcode"){S.xcode=ev.target.value;vOpx()}
   if(id==="edept"){S.edept=ev.target.value;vEmps()}
   if(id==="est"){S.est=ev.target.value;vEmps()}
