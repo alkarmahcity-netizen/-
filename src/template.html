@@ -349,7 +349,7 @@ function baseAdvCount(p){
 
 function recompute(){
   const np=NP.map(d=>({id:d._id,src:d.src||SRC_MAIN,st:d.st||"غير محددة",pl:d.pl||"غير محددة",nm:d.nm||"مشروع بلا اسم",co:d.co||"—",
-    c0:+d.c0||0,c:+d.c||+d.c0||0,ap:+d.ap||0,sp:0,adv:0,bank:0,fin:0,cno:d.cno||null,cdt:d.cdt||null,sdt:d.sdt||null,dur:+d.dur||0,ext:0,yrs:[],raw:[],isNew:true,overAlloc:!!d.overAlloc,at:d.at,by:d.by}));
+    c0:+d.c0||0,c:+d.c||+d.c0||0,ap:+d.ap||0,sp:0,adv:0,bank:0,fin:0,cno:d.cno||null,cdt:d.cdt||null,sdt:d.sdt||null,dur:+d.dur||0,ext:0,yrs:[],raw:[],isNew:true,efn:d.engFileNo||"",overAlloc:!!d.overAlloc,at:d.at,by:d.by}));
   const all=[...BASE,...np];
   const txBy=group(TX,"pid"),advBy=group(ADV,"pid"),guBy=group(GU,"pid"),loBy=group(LO,"pid");
   E=all.map(p=>{const e={...p};e.tx=txBy[p.id]||[];
@@ -1342,6 +1342,7 @@ function engMatch(){ENGM={};if(!ENG||!ENG.ok||!Array.isArray(ENG.projects))retur
   const byKey={};for(const p of P){const k=puKey(p.name);if(k)(byKey[k]=byKey[k]||[]).push(p)}
   for(const e of E){let p=null,how="";
     if(inv[e.id]&&byFile.has(String(inv[e.id]))){p=byFile.get(String(inv[e.id]));how="ربط مثبّت في النظام الهندسي"}
+    if(!p&&e.efn&&byFile.has(String(e.efn))){p=byFile.get(String(e.efn));how="أُضيف من الموقف العام (ربط مثبّت)"}
     if(!p){let C=byKey[puKey(e.nm)]||[];
       if(C.length>1&&e.cno){const c2=C.filter(q=>engDig(q.contractNo)===engDig(e.cno));if(c2.length)C=c2}
       if(C.length>1){const c2=C.filter(q=>coKey(q.contractor)===e.ck);if(c2.length)C=c2}
@@ -1394,15 +1395,61 @@ function vEng(){const desk=!!(window.ANBAR_DESKTOP&&window.ANBAR_DESKTOP.engRead
    <button class="kpi" data-rule="engc"><span class="l"><span class="pill s-warn">مبلغ العقد مختلف</span></span><span class="v num">${fmt(cnt("engc"))}</span><span class="s">العقد في المالية لا يساوي الكلفة الكلية في الهندسي</span></button></div>
   ${G.length?`<div class="card"><h2>المقارنة بين الصرف والإنجاز <small>الأكبر فرقاً أولاً</small></h2><div class="tbl-wrap cards"><table><thead><tr><th>المشروع</th><th>الاضبارة</th><th class="n">الإنجاز الفعلي</th><th class="n">نسبة الصرف</th><th class="n">الفرق</th><th>الحالة الهندسية</th></tr></thead><tbody>
    ${G.map(({e,gap})=>`<tr data-id="${e.id}"><td class="wide"><div class="pname">${esc(e.nm)}</div><div class="pco">${esc(e.co)}</div></td><td data-l="الاضبارة"><span class="num">${esc(e.eng.fileNo)}</span></td><td class="n" data-l="الإنجاز الفعلي"><span class="num">${e.eng.act.toFixed(1)}%</span></td><td class="n" data-l="نسبة الصرف"><span class="num">${(e.rate*100).toFixed(1)}%</span></td><td class="n" data-l="الفرق"><b class="num" style="${gap>10?"color:var(--bad)":""}">${gap>0?"+":""}${gap.toFixed(1)}</b></td><td data-l="الحالة الهندسية">${esc(e.eng.status||"—")}</td></tr>`).join("")}</tbody></table></div></div>`:""}`:""}
+  ${ENG&&ENG.ok?engCnoCard()+engAddCard():""}
   <div class="card"><h2>كيف يعمل الربط</h2><div class="note" style="display:grid;gap:6px">
    <div><b>من المالية إلى الهندسي:</b> يقرأ النظام الهندسي ملف بيانات المالية <span class="num">anbar-data.json</span> (نسخة ويندوز)، أو ملف «الموقف الشامل» من التقارير. صار الملف يحمل رقم العقد ورقم الاضبارة والسلف المرفوعة والمصروفة لربط أدق.</div>
    <div><b>من الهندسي إلى المالية:</b> يقرأ هذا البرنامج ملف الموقف الهندسي، فيظهر الإنجاز الفعلي والمدد وأوامر التغيير والسلف المدققة في بطاقة كل مشروع، وتعمل تنبيهات: الصرف يسبق الإنجاز، ومشروع متوقف عليه سلف، واختلاف مبلغ العقد.</div>
+   <div><b>الإضافة من الموقف العام:</b> المشروع المضاف من الموقف العام يبقى مربوطاً برقم اضبارته حتى لو تغيّر اسمه.</div>
    <div><b>المطابقة:</b> أولاً بالربط الذي ثبّته المستخدم في نافذة «💰 ربط المالية» في النظام الهندسي، ثم بالاسم ورقم العقد والشركة.</div></div></div>`}
 async function engUpload(f){try{const d=JSON.parse(await f.text());if(!d||!Array.isArray(d.projects))throw new Error("x");
   ENG={ok:true,file:f.name,mtime:f.lastModified||Date.now(),projects:d.projects,links:d.links||{},finLinks:{}};
   try{localStorage.setItem("engcache",JSON.stringify(ENG))}catch(_){}
   logA("قراءة ملف الموقف الهندسي",{label:"الربط الهندسي",d:`${f.name} · ${d.projects.length} مشروعاً`});refreshAll();toast("قُرئ ملف الموقف الهندسي")}
   catch(_){toast("الملف ليس ملف الموقف الهندسي (registry.json)")}}
+
+/* أرقام العقود من الموقف العام + إضافة مشاريع الموقف العام غير الموجودة في المالية */
+IMPORTS.engadd={title:"إضافة مشاريع من الموقف العام",async undo(b){for(const id of b.undo.added||[]){const e=EM[id];if(e&&(e.advs.length||e.gs.length||e.loans.length||e.tx.length))throw new Error("المشروع «"+e.nm+"» عليه حركات بعد الإضافة");await DB.collection("projects").doc(id).delete()}}};
+IMPORTS.engcno={title:"أرقام العقود من الموقف العام",async undo(b){const by=await me();for(const t of TX.filter(x=>x.batch===b.undo.batch&&x.type==="edit")){const rev=Object.fromEntries(Object.entries(t.changes).map(([k,c])=>[k,{from:c.to,to:c.from}]));
+  await DB.collection("txns").add({pid:t.pid,type:"edit",changes:rev,amt:0,date:today(),note:"تراجع عن أرقام العقود من الموقف العام",at:new Date().toISOString(),by})}}};
+const engSrcOf=f=>/استقرار/.test(f||"")?"ملف اعادة الاستقرار":/منافذ/.test(f||"")?"ملف منافذ حدودية":SRC_MAIN;
+const engCnoList=()=>E.filter(e=>e.eng&&!String(e.cno??"").trim()&&engDig(e.eng.contractNo)).map(e=>({e,cno:String(e.eng.contractNo).trim()}));
+function engUnmatched(){if(!ENG||!ENG.ok)return [];const used=new Set(Object.values(ENGM).map(m=>String(m.p.fileNo)));return ENG.projects.filter(p=>p&&p.name&&!used.has(String(p.fileNo)))}
+function engCnoCard(){const L=engCnoList();return `<div class="card"><h2>أرقام العقود من الموقف العام <small>${fmt(L.length)} مشروعاً</small></h2>
+  ${L.length?`<p class="note">مشاريع مالية مربوطة بالموقف العام وليس لها رقم عقد في المالية، ورقمها موجود في الموقف العام. راجع الربط قبل الحفظ. كل رقم يُسجَّل تعديلاً في سجل الحركات، ويمكن التراجع عن الحفظ كاملاً.</p>
+   <div class="tbl-wrap" style="margin-top:8px;max-height:40vh"><table><thead><tr><th>المشروع في المالية</th><th>الاضبارة</th><th>المشروع في الموقف العام</th><th>رقم العقد</th><th>طريقة الربط</th></tr></thead><tbody>
+   ${L.slice(0,300).map(({e,cno})=>`<tr data-id="${e.id}"><td class="pname">${esc(e.nm)}</td><td class="num">${esc(e.eng.fileNo)}</td><td class="pco">${esc(e.eng.name)}</td><td class="num"><b>${esc(cno)}</b></td><td class="pco">${esc(e.eng.how)}</td></tr>`).join("")}</tbody></table></div>
+   ${L.length>300?'<p class="note">يُعرض أول 300، ويُحفظ الكل.</p>':""}
+   ${canEditBase()?`<div class="acts" style="margin-top:10px"><button class="btn gold" data-engcno="1">حفظ أرقام العقود (${fmt(L.length)})</button><span class="fmsg" id="engcno_msg"></span></div>`:""}`
+  :`<p class="note">كل المشاريع المربوطة لها رقم عقد في المالية، أو لا يوجد رقم لها في الموقف العام.</p>`}
+  ${impBatches("engcno")}</div>`}
+function engAddCard(){const U=engUnmatched();const q=norm(S.engq||"");const L=U.filter(p=>!q||norm([p.name,p.contractor,p.fileNo,p.contractNo,p.fund].join(" ")).includes(q)).slice(0,300);const sel=S.engSel||(S.engSel=new Set());const FK=new Set(E.map(e=>puKey(e.nm)));
+  return `<div class="card"><h2>مشاريع في الموقف العام بلا مقابل في المالية <small>${fmt(U.length)} مشروعاً</small></h2>
+  <p class="note">اختر المشاريع التي تريد إضافتها إلى المالية. يُنقل اسمها وشركتها ورقم عقدها ومبلغها وحالتها وبرنامج تمويلها، ويُثبَّت ربطها برقم الاضبارة. لا تُفحص على التخصيص لأنها عقود قائمة. يمكن التراجع عن الإضافة كاملة ما لم تُسجَّل عليها حركات.</p>
+  <div class="filters" style="margin-top:8px"><input class="inp" type="search" id="engq" placeholder="ابحث بالاسم أو الشركة أو رقم الاضبارة أو العقد أو التمويل…" value="${esc(S.engq||"")}"></div>
+  ${L.length?`<div class="tbl-wrap" style="margin-top:8px;max-height:50vh"><table><thead><tr><th><input type="checkbox" id="engall" aria-label="اختيار الكل" ${L.every(p=>sel.has(String(p.fileNo)))?"checked":""}></th><th>الاضبارة</th><th>المشروع</th><th>الشركة</th><th>رقم العقد</th><th class="n">الكلفة الكلية</th><th>التمويل</th><th>تُضاف إلى</th></tr></thead><tbody>
+   ${L.map(p=>`<tr><td><input type="checkbox" data-engsel="${esc(p.fileNo)}" ${sel.has(String(p.fileNo))?"checked":""}></td><td class="num">${esc(p.fileNo)}</td><td class="pname">${esc(p.name)}${FK.has(puKey(p.name))?' <span class="pill s-warn">اسمه موجود في المالية: تحقق قبل الإضافة</span>':""}</td><td class="pco">${esc(p.contractor||"")}</td><td class="num">${esc(p.contractNo||"")}</td><td class="n num">${fmt(engNum(p.total)||((engNum(p.orig)||0)+(engNum(p.changeCost)||0)))}</td><td class="pco">${esc(p.fund||"")}</td><td class="pco">${esc(engSrcOf(p.fund))}</td></tr>`).join("")}</tbody></table></div>
+   ${U.length>300&&!q?'<p class="note">يُعرض أول 300. استخدم البحث للوصول إلى غيرها.</p>':""}`
+  :`<p class="note" style="margin-top:8px">${U.length?"لا نتائج للبحث.":"كل مشاريع الموقف العام مربوطة بمشاريع في المالية."}</p>`}
+  ${canEditBase()&&U.length?`<div class="acts" style="margin-top:10px"><button class="btn gold" data-engadd="1" ${sel.size?"":"disabled"}>إضافة المختار إلى المالية (${fmt(sel.size)})</button><span class="fmsg" id="engadd_msg"></span></div>`:""}
+  ${impBatches("engadd")}</div>`}
+async function engAdd(btn){if(!isUnlocked()){S.after=null;openDrawer({kind:"unlock"});return}
+  const byFile=new Map(ENG.projects.map(p=>[String(p.fileNo),p]));const used=new Set(Object.values(ENGM).map(m=>String(m.p.fileNo)));
+  const L=[...(S.engSel||[])].map(f=>byFile.get(f)).filter(p=>p&&!used.has(String(p.fileNo)));if(!L.length)return;const msg=$("#engadd_msg");
+  if(btn.dataset.sure!=="1"){btn.dataset.sure="1";btn.textContent=`اضغط مرة أخرى لتأكيد إضافة ${L.length} مشروعاً`;return}
+  btn.disabled=true;const by=await me(),bid=uid();const added=[];let n=0;
+  try{for(const p of L){const id=uid();const c0=Math.round(engNum(p.orig)||0),c=Math.round(engNum(p.total)||(c0+(engNum(p.changeCost)||0)));
+      await DB.collection("projects").doc(id).set({src:engSrcOf(p.fund),nm:p.name,co:p.contractor||"",pl:p.fund||"غير محددة",st:p.status||"قيد التنفيذ",cno:p.contractNo?String(p.contractNo):"",cdt:"",sdt:p.start||"",dur:Math.round(engNum(p.dur)||0),c0:c0||c,c:c||c0,ap:Math.round(engNum(p.approvedCost)||0),engFileNo:String(p.fileNo),at:new Date().toISOString(),by,batch:bid,fromEng:true});
+      added.push(id);n++;if(msg)msg.textContent=`جارٍ الإضافة… ${n} من ${L.length}`}
+    await DB.collection("imports").add({kind:"engadd",file:"الموقف العام (registry.json)",at:new Date().toISOString(),by,counts:{new:n},undo:{added},st:"active",bid});
+    logA("إضافة مشاريع من الموقف العام",{label:"الربط الهندسي",d:`${n} مشروعاً، الاضابير: `+L.slice(0,8).map(p=>p.fileNo).join("، ")+(L.length>8?"…":"")});S.engSel=new Set();toast(`أُضيف ${n} مشروعاً إلى المالية`)}
+  catch(err){btn.disabled=false;toast("توقفت الإضافة بعد "+n+" مشروعاً")}}
+async function engSaveCno(btn){if(!isUnlocked()){S.after=null;openDrawer({kind:"unlock"});return}const L=engCnoList();if(!L.length)return;const msg=$("#engcno_msg");
+  if(btn.dataset.sure!=="1"){btn.dataset.sure="1";btn.textContent=`اضغط مرة أخرى لتأكيد حفظ ${L.length} رقماً`;return}
+  btn.disabled=true;const by=await me(),bid=uid();let n=0;
+  try{for(const {e,cno} of L){await DB.collection("txns").add({pid:e.id,type:"edit",changes:{cno:{from:"",to:cno}},amt:0,date:today(),note:`رقم العقد من الموقف العام (اضبارة ${e.eng.fileNo})`,at:new Date().toISOString(),by,batch:bid});n++;if(msg)msg.textContent=`جارٍ الحفظ… ${n} من ${L.length}`}
+    await DB.collection("imports").add({kind:"engcno",file:"الموقف العام (registry.json)",at:new Date().toISOString(),by,counts:{upd:n},undo:{batch:bid},st:"active",bid});
+    logA("أرقام العقود من الموقف العام",{label:"الربط الهندسي",d:`${n} مشروعاً`});toast(`حُفظ رقم العقد لـ ${n} مشروعاً`)}
+  catch(err){btn.disabled=false;toast("توقف الحفظ بعد "+n+" مشروعاً")}}
 
 /* التقارير */
 function vReports(){
@@ -1808,8 +1855,10 @@ function go(v){if(location.hash==="#"+v)render();else location.hash=v;window.scr
 addEventListener("hashchange",render);
 
 document.addEventListener("click",ev=>{
-  const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],[data-open],[data-xl],[data-astage],[data-act],[data-doact],[data-cancelact],[data-advform],[data-pickp],[data-gact],[data-cancelgact],[data-dogact],[data-gform],[data-g5],[data-ayr],[data-alloc],[data-goproj],[data-gst],[data-enf],[data-unlock],[data-lock],[data-editadv],[data-legacy],[data-loanform],[data-lact],[data-dolact],[data-cancellact],[data-grp],[data-imp],[data-tpl],[data-oyr],[data-opline],[data-xact],[data-doxact],[data-cancelxact],[data-xmore],[data-emp],[data-emore],[data-jact],[data-dojact],[data-canceljact],[data-addjl],[data-undo],[data-impgo],[data-ledger],#moreb");
+  const t=ev.target.closest("[data-src],[data-plan],[data-st],[data-co],[data-rule],[data-id],[data-clr],[data-open],[data-xl],[data-astage],[data-act],[data-doact],[data-cancelact],[data-advform],[data-pickp],[data-gact],[data-cancelgact],[data-dogact],[data-gform],[data-g5],[data-ayr],[data-alloc],[data-goproj],[data-gst],[data-enf],[data-unlock],[data-lock],[data-editadv],[data-legacy],[data-loanform],[data-lact],[data-dolact],[data-cancellact],[data-engcno],[data-engadd],[data-grp],[data-imp],[data-tpl],[data-oyr],[data-opline],[data-xact],[data-doxact],[data-cancelxact],[data-xmore],[data-emp],[data-emore],[data-jact],[data-dojact],[data-canceljact],[data-addjl],[data-undo],[data-impgo],[data-ledger],#moreb");
   if(!t)return;
+  if(t.dataset.engcno){engSaveCno(t);return}
+  if(t.dataset.engadd){engAdd(t);return}
   if(t.dataset.grp){go(GROUPS[t.dataset.grp].v[0]);return}
   if(t.dataset.imp){const d={kind:"import",imp:t.dataset.imp};S.imp=null;IMPWB=null;if(!isUnlocked()){S.after=d;openDrawer({kind:"unlock"});return}openDrawer(d);return}
   if(t.dataset.tpl){impTemplate(t.dataset.tpl);return}
@@ -1873,9 +1922,12 @@ let qt;document.addEventListener("input",ev=>{const id=ev.target.id;
     else box.querySelector("#ip_pct").value=isFinite(v)&&g&&ev.target.value!==""?+(v/g*100).toFixed(2):""}
   if(id==="xq"){clearTimeout(qt);qt=setTimeout(()=>{S.xq=ev.target.value;vOpx();const q=$("#xq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="eq"){clearTimeout(qt);qt=setTimeout(()=>{S.eq=ev.target.value;vEmps();const q=$("#eq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
+  if(id==="engq"){clearTimeout(qt);qt=setTimeout(()=>{S.engq=ev.target.value;vEng();const q=$("#engq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="gq"){clearTimeout(qt);qt=setTimeout(()=>{S.gq=ev.target.value;vGuar();const q=$("#gq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}
   if(id==="aq"){clearTimeout(qt);qt=setTimeout(()=>{S.aq=ev.target.value;vAdvances();const q=$("#aq");q.focus();q.setSelectionRange(q.value.length,q.value.length)},250)}});
 document.addEventListener("change",ev=>{const id=ev.target.id;
+  if(ev.target.dataset&&ev.target.dataset.engsel!==undefined){const s=S.engSel||(S.engSel=new Set());const f=ev.target.dataset.engsel;ev.target.checked?s.add(f):s.delete(f);const b=$("[data-engadd]");if(b){b.disabled=!s.size;b.dataset.sure="";b.textContent=`إضافة المختار إلى المالية (${fmt(s.size)})`}const a=$("#engall");return}
+  if(id==="engall"){const s=S.engSel||(S.engSel=new Set());document.querySelectorAll("[data-engsel]").forEach(x=>{x.checked=ev.target.checked;ev.target.checked?s.add(x.dataset.engsel):s.delete(x.dataset.engsel)});const b=$("[data-engadd]");if(b){b.disabled=!s.size;b.dataset.sure="";b.textContent=`إضافة المختار إلى المالية (${fmt(s.size)})`}return}
   if(id==="engfile"&&ev.target.files&&ev.target.files[0])engUpload(ev.target.files[0]);
   if(id==="rpct"){S.rpct=Math.min(100,Math.max(1,+ev.target.value||20))}
   if(id==="xcode"){S.xcode=ev.target.value;vOpx()}
